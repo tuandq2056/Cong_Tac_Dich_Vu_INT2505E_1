@@ -184,6 +184,7 @@ components:
           example: Textbook
         status:
           type: string
+          enum: [available, pending, sold]
           description: "Trạng thái sách (available, pending, sold)"
           example: available
   responses:
