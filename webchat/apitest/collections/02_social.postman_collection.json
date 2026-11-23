@@ -1,0 +1,1250 @@
+{
+  "info": {
+    "_postman_id": "b2c3d4e5-f6a1-4b2c-9d3e-4f5a6b7c8d9e",
+    "name": "02_social",
+    "description": "Social and Friendship API test collection for WebChat SOA",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "02.01 - Friend Request Self-Invite (422)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 422 Unprocessable Entity\", function () {",
+              "    pm.response.to.have.status(422);",
+              "});",
+              "pm.test(\"Error code is SELF_INVITE\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.error.code).to.eql(\"SELF_INVITE\");",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{user_a_token}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"recipient_id\": \"{{user_a_id}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{base_url}}/api/v1/friend-requests",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "friend-requests"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "02.02 - Send Friend Request A -> B (201)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 201 Created\", function () {",
+              "    pm.response.to.have.status(201);",
+              "});",
+              "pm.test(\"Response contains pending friend request\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.id).to.be.a('string').and.not.empty;",
+              "    pm.expect(jsonData.status).to.eql(\"pending\");",
+              "    pm.expect(jsonData.sender.id).to.eql(pm.environment.get(\"user_a_id\"));",
+              "    pm.expect(jsonData.recipient.id).to.eql(pm.environment.get(\"user_b_id\"));",
+              "    pm.environment.set(\"friend_request_ab_id\", jsonData.id);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{user_a_token}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"recipient_id\": \"{{user_b_id}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{base_url}}/api/v1/friend-requests",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "friend-requests"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "02.03 - Idempotent Resend Friend Request A -> B (200)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 200 OK\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "pm.test(\"Replay returns existing pending request\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.id).to.eql(pm.environment.get(\"friend_request_ab_id\"));",
+              "    pm.expect(jsonData.status).to.eql(\"pending\");",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{user_a_token}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"recipient_id\": \"{{user_b_id}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{base_url}}/api/v1/friend-requests",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "friend-requests"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "02.04 - Reverse Friend Request Conflict B -> A (409)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 409 Conflict\", function () {",
+              "    pm.response.to.have.status(409);",
+              "});",
+              "pm.test(\"Error code is INCOMING_REQUEST_EXISTS with related_id\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.error.code).to.eql(\"INCOMING_REQUEST_EXISTS\");",
+              "    pm.expect(jsonData.error.related_id).to.eql(pm.environment.get(\"friend_request_ab_id\"));",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{user_b_token}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"recipient_id\": \"{{user_a_id}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{base_url}}/api/v1/friend-requests",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "friend-requests"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "02.05 - List Incoming Friend Requests for User B (200)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 200 OK\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "pm.test(\"Incoming requests contain friend_request_ab_id\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.items).to.be.an('array');",
+              "    var targetId = pm.environment.get(\"friend_request_ab_id\");",
+              "    var found = jsonData.items.some(function(item) { return item.id === targetId; });",
+              "    pm.expect(found).to.be.true;",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{user_b_token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/v1/friend-requests?direction=incoming&status=pending",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "friend-requests"
+          ],
+          "query": [
+            {
+              "key": "direction",
+              "value": "incoming"
+            },
+            {
+              "key": "status",
+              "value": "pending"
+            }
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "02.06 - Accept Friend Request by User B (200)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 200 OK\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "pm.test(\"Friend request status is accepted\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.id).to.eql(pm.environment.get(\"friend_request_ab_id\"));",
+              "    pm.expect(jsonData.status).to.eql(\"accepted\");",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{user_b_token}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"status\": \"accepted\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{base_url}}/api/v1/friend-requests/{{friend_request_ab_id}}",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "friend-requests",
+            "{{friend_request_ab_id}}"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "02.07 - Replay Accept Friend Request by User B (200)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 200 OK\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "pm.test(\"Replayed request status remains accepted\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.status).to.eql(\"accepted\");",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{user_b_token}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"status\": \"accepted\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{base_url}}/api/v1/friend-requests/{{friend_request_ab_id}}",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "friend-requests",
+            "{{friend_request_ab_id}}"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "02.08 - Cancel Already Accepted Request Conflict (409)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 409 Conflict\", function () {",
+              "    pm.response.to.have.status(409);",
+              "});",
+              "pm.test(\"Error code is REQUEST_CLOSED\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.error.code).to.eql(\"REQUEST_CLOSED\");",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{user_a_token}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"status\": \"cancelled\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{base_url}}/api/v1/friend-requests/{{friend_request_ab_id}}",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "friend-requests",
+            "{{friend_request_ab_id}}"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "02.09a - Send Friend Request A -> C (201)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 201 Created\", function () {",
+              "    pm.response.to.have.status(201);",
+              "});",
+              "pm.test(\"Stores friend_request_ac_id\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.id).to.be.a('string').and.not.empty;",
+              "    pm.environment.set(\"friend_request_ac_id\", jsonData.id);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{user_a_token}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"recipient_id\": \"{{user_c_id}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{base_url}}/api/v1/friend-requests",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "friend-requests"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "02.09b - Accept Friend Request by User C (200)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 200 OK\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "pm.test(\"Friend request A-C status is accepted\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.status).to.eql(\"accepted\");",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{user_c_token}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"status\": \"accepted\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{base_url}}/api/v1/friend-requests/{{friend_request_ac_id}}",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "friend-requests",
+            "{{friend_request_ac_id}}"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "02.10 - List Friends for User A (200)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 200 OK\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "pm.test(\"Friends list contains User B and User C\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.items).to.be.an('array');",
+              "    var bId = pm.environment.get(\"user_b_id\");",
+              "    var cId = pm.environment.get(\"user_c_id\");",
+              "    var hasB = jsonData.items.some(function(u) { return u.id === bId; });",
+              "    var hasC = jsonData.items.some(function(u) { return u.id === cId; });",
+              "    pm.expect(hasB).to.be.true;",
+              "    pm.expect(hasC).to.be.true;",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{user_a_token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/v1/friends",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "friends"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "02.11 - List Friends for User B (200)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 200 OK\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "pm.test(\"User B friends list contains User A\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.items).to.be.an('array');",
+              "    var aId = pm.environment.get(\"user_a_id\");",
+              "    var hasA = jsonData.items.some(function(u) { return u.id === aId; });",
+              "    pm.expect(hasA).to.be.true;",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{user_b_token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/v1/friends",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "friends"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "02.12 - Put Direct Conversation A -> B (201)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 201 Created\", function () {",
+              "    pm.response.to.have.status(201);",
+              "});",
+              "pm.test(\"Direct conversation created with peer User B\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.id).to.be.a('string').and.not.empty;",
+              "    pm.expect(jsonData.type).to.eql(\"direct\");",
+              "    pm.expect(jsonData.peer.id).to.eql(pm.environment.get(\"user_b_id\"));",
+              "    pm.environment.set(\"direct_conversation_id\", jsonData.id);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{user_a_token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/v1/conversations/direct/{{user_b_id}}",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "conversations",
+            "direct",
+            "{{user_b_id}}"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "02.13 - Replay Direct Conversation B -> A (200)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 200 OK\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "pm.test(\"Existing direct conversation returned with peer User A\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.id).to.eql(pm.environment.get(\"direct_conversation_id\"));",
+              "    pm.expect(jsonData.type).to.eql(\"direct\");",
+              "    pm.expect(jsonData.peer.id).to.eql(pm.environment.get(\"user_a_id\"));",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{user_b_token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/v1/conversations/direct/{{user_a_id}}",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "conversations",
+            "direct",
+            "{{user_a_id}}"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "02.14 - Direct Conversation Friendship Required (403)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 403 Forbidden\", function () {",
+              "    pm.response.to.have.status(403);",
+              "});",
+              "pm.test(\"Error code is FRIENDSHIP_REQUIRED\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.error.code).to.eql(\"FRIENDSHIP_REQUIRED\");",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{user_b_token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/v1/conversations/direct/{{user_c_id}}",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "conversations",
+            "direct",
+            "{{user_c_id}}"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "02.15 - Direct Conversation Self (422)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 422 Unprocessable Entity\", function () {",
+              "    pm.response.to.have.status(422);",
+              "});",
+              "pm.test(\"Error code is SELF_CONVERSATION\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.error.code).to.eql(\"SELF_CONVERSATION\");",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{user_a_token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/v1/conversations/direct/{{user_a_id}}",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "conversations",
+            "direct",
+            "{{user_a_id}}"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "02.16 - Create Group Conversation (201)",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "var uuid = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {",
+              "    var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);",
+              "    return v.toString(16);",
+              "});",
+              "pm.environment.set(\"group_idempotency_key\", uuid);"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 201 Created\", function () {",
+              "    pm.response.to.have.status(201);",
+              "});",
+              "pm.test(\"Group conversation created successfully\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.id).to.be.a('string').and.not.empty;",
+              "    pm.expect(jsonData.type).to.eql(\"group\");",
+              "    pm.expect(jsonData.name).to.eql(\"Project Alpha\");",
+              "    pm.expect(jsonData.created_by.id).to.eql(pm.environment.get(\"user_a_id\"));",
+              "    pm.expect(jsonData.member_count).to.eql(3);",
+              "    pm.environment.set(\"group_conversation_id\", jsonData.id);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{user_a_token}}"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "{{group_idempotency_key}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Project Alpha\",\n  \"member_ids\": [\"{{user_b_id}}\", \"{{user_c_id}}\"]\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{base_url}}/api/v1/conversations/groups",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "conversations",
+            "groups"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "02.17 - Replay Group Creation (Idempotent 200)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 200 OK\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "pm.test(\"Replay returns existing group conversation\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.id).to.eql(pm.environment.get(\"group_conversation_id\"));",
+              "    pm.expect(jsonData.name).to.eql(\"Project Alpha\");",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{user_a_token}}"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "{{group_idempotency_key}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Project Alpha\",\n  \"member_ids\": [\"{{user_b_id}}\", \"{{user_c_id}}\"]\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{base_url}}/api/v1/conversations/groups",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "conversations",
+            "groups"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "02.18 - Group Creation Idempotency Conflict (409)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 409 Conflict\", function () {",
+              "    pm.response.to.have.status(409);",
+              "});",
+              "pm.test(\"Error code is IDEMPOTENCY_CONFLICT\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.error.code).to.eql(\"IDEMPOTENCY_CONFLICT\");",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{user_a_token}}"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "{{group_idempotency_key}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Modified Project Alpha Name\",\n  \"member_ids\": [\"{{user_b_id}}\", \"{{user_c_id}}\"]\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{base_url}}/api/v1/conversations/groups",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "conversations",
+            "groups"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "02.19 - List Conversations for User A (200)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 200 OK\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "pm.test(\"Conversations list contains direct and group conversations\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.items).to.be.an('array');",
+              "    var directId = pm.environment.get(\"direct_conversation_id\");",
+              "    var groupId = pm.environment.get(\"group_conversation_id\");",
+              "    var hasDirect = jsonData.items.some(function(c) { return c.id === directId; });",
+              "    var hasGroup = jsonData.items.some(function(c) { return c.id === groupId; });",
+              "    pm.expect(hasDirect).to.be.true;",
+              "    pm.expect(hasGroup).to.be.true;",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{user_a_token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/v1/conversations",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "conversations"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "02.20 - Get Group Conversation Details (200)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 200 OK\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "pm.test(\"Details match group conversation\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.id).to.eql(pm.environment.get(\"group_conversation_id\"));",
+              "    pm.expect(jsonData.type).to.eql(\"group\");",
+              "    pm.expect(jsonData.name).to.eql(\"Project Alpha\");",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{user_b_token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/v1/conversations/{{group_conversation_id}}",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "conversations",
+            "{{group_conversation_id}}"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "02.21 - List Group Conversation Members (200)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 200 OK\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "pm.test(\"Members list contains all 3 members\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.items).to.be.an('array');",
+              "    pm.expect(jsonData.items.length).to.eql(3);",
+              "    var aId = pm.environment.get(\"user_a_id\");",
+              "    var bId = pm.environment.get(\"user_b_id\");",
+              "    var cId = pm.environment.get(\"user_c_id\");",
+              "    var hasA = jsonData.items.some(function(u) { return u.id === aId; });",
+              "    var hasB = jsonData.items.some(function(u) { return u.id === bId; });",
+              "    var hasC = jsonData.items.some(function(u) { return u.id === cId; });",
+              "    pm.expect(hasA).to.be.true;",
+              "    pm.expect(hasB).to.be.true;",
+              "    pm.expect(hasC).to.be.true;",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{user_a_token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/v1/conversations/{{group_conversation_id}}/members",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "conversations",
+            "{{group_conversation_id}}",
+            "members"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "02.22 - Conversation Outsider Isolation (404)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 404 Not Found\", function () {",
+              "    pm.response.to.have.status(404);",
+              "});",
+              "pm.test(\"Error code is CONVERSATION_NOT_FOUND\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.error.code).to.eql(\"CONVERSATION_NOT_FOUND\");",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{user_c_token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/v1/conversations/{{direct_conversation_id}}",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "conversations",
+            "{{direct_conversation_id}}"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "02.24 - Remove Friend C by User A",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 204 No Content\", function () {",
+              "    pm.response.to.have.status(204);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{user_a_token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/v1/friends/{{user_c_id}}",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "friends",
+            "{{user_c_id}}"
+          ]
+        }
+      },
+      "response": []
+    }
+  ]
+}

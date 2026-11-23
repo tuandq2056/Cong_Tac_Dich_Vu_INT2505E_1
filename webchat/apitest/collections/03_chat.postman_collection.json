@@ -1,0 +1,573 @@
+{
+  "info": {
+    "_postman_id": "c3d4e5f6-a1b2-4c3d-0e4f-5a6b7c8d9e0f",
+    "name": "03_chat",
+    "description": "Chat REST, Attachments, Read State and Summary API test collection for WebChat SOA",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "03.01 - Initial Message History Empty (200)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 200 OK\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "pm.test(\"Initial message list is empty\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.items).to.be.an('array').that.is.empty;",
+              "    pm.expect(jsonData.has_more).to.be.false;",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{user_a_token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/v1/conversations/{{direct_conversation_id}}/messages",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "conversations",
+            "{{direct_conversation_id}}",
+            "messages"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "03.02 - Initial Read State (200)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 200 OK\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "pm.test(\"Initial read state has 0 counts and 0 sequence\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.last_read_seq).to.eql(0);",
+              "    pm.expect(jsonData.latest_seq).to.eql(0);",
+              "    pm.expect(jsonData.unread_text_count).to.eql(0);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{user_a_token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/v1/conversations/{{direct_conversation_id}}/read-state",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "conversations",
+            "{{direct_conversation_id}}",
+            "read-state"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "03.03 - Upload Audio Attachment (201)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 201 Created\", function () {",
+              "    pm.response.to.have.status(201);",
+              "});",
+              "pm.test(\"Response contains audio attachment metadata\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.id).to.be.a('string').and.not.empty;",
+              "    pm.expect(jsonData.kind).to.eql(\"audio\");",
+              "    pm.expect(jsonData.byte_size).to.be.a('number').and.above(0);",
+              "    pm.environment.set(\"audio_attachment_id\", jsonData.id);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{user_a_token}}"
+          }
+        ],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "kind",
+              "value": "audio",
+              "type": "text"
+            },
+            {
+              "key": "file",
+              "type": "file",
+              "src": "apitest/fixtures/test_audio.webm"
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{base_url}}/api/v1/conversations/{{direct_conversation_id}}/attachments",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "conversations",
+            "{{direct_conversation_id}}",
+            "attachments"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "03.04 - Upload File Attachment (201)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 201 Created\", function () {",
+              "    pm.response.to.have.status(201);",
+              "});",
+              "pm.test(\"Response contains file attachment metadata\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.id).to.be.a('string').and.not.empty;",
+              "    pm.expect(jsonData.kind).to.eql(\"file\");",
+              "    pm.expect(jsonData.byte_size).to.be.a('number').and.above(0);",
+              "    pm.environment.set(\"file_attachment_id\", jsonData.id);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{user_a_token}}"
+          }
+        ],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "kind",
+              "value": "file",
+              "type": "text"
+            },
+            {
+              "key": "file",
+              "type": "file",
+              "src": "apitest/fixtures/test_file.txt"
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{base_url}}/api/v1/conversations/{{direct_conversation_id}}/attachments",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "conversations",
+            "{{direct_conversation_id}}",
+            "attachments"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "03.05 - Download Pending Audio Attachment (Uploader Access 200)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 200 OK\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "pm.test(\"Response has private no-store Cache-Control header\", function () {",
+              "    var cacheControl = pm.response.headers.get(\"Cache-Control\");",
+              "    pm.expect(cacheControl).to.include(\"no-store\");",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{user_a_token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/v1/conversations/{{direct_conversation_id}}/attachments/{{audio_attachment_id}}/content",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "conversations",
+            "{{direct_conversation_id}}",
+            "attachments",
+            "{{audio_attachment_id}}",
+            "content"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "03.06 - Download Pending Attachment by Outsider (404)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 404 Not Found\", function () {",
+              "    pm.response.to.have.status(404);",
+              "});",
+              "pm.test(\"Error code is ATTACHMENT_NOT_FOUND or CONVERSATION_NOT_FOUND\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    var code = jsonData.error.code;",
+              "    pm.expect(code === \"ATTACHMENT_NOT_FOUND\" || code === \"CONVERSATION_NOT_FOUND\").to.be.true;",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{user_b_token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/v1/conversations/{{direct_conversation_id}}/attachments/{{audio_attachment_id}}/content",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "conversations",
+            "{{direct_conversation_id}}",
+            "attachments",
+            "{{audio_attachment_id}}",
+            "content"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "03.07 - Read Ahead Check (422)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 422 Unprocessable Entity\", function () {",
+              "    pm.response.to.have.status(422);",
+              "});",
+              "pm.test(\"Error code is READ_AHEAD\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.error.code).to.eql(\"READ_AHEAD\");",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{user_a_token}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"through_seq\": 9999\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{base_url}}/api/v1/conversations/{{direct_conversation_id}}/read-state",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "conversations",
+            "{{direct_conversation_id}}",
+            "read-state"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "03.08 - Read State Monotonic Advancement (200)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 200 OK\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "pm.test(\"Read state last_read_seq remains valid\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.last_read_seq).to.eql(0);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{user_a_token}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"through_seq\": 0\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{base_url}}/api/v1/conversations/{{direct_conversation_id}}/read-state",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "conversations",
+            "{{direct_conversation_id}}",
+            "read-state"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "03.09 - Unread Summary on Empty Status (200)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 200 OK\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "pm.test(\"Unread summary returns empty status and zero counts\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.status).to.eql(\"empty\");",
+              "    pm.expect(jsonData.summary).to.be.null;",
+              "    pm.expect(jsonData.source_count).to.eql(0);",
+              "    pm.expect(jsonData.omitted_count).to.eql(0);",
+              "    pm.expect(jsonData.source_from_seq).to.be.null;",
+              "    pm.expect(jsonData.source_to_seq).to.be.null;",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{user_a_token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/v1/conversations/{{direct_conversation_id}}/unread-summary",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "conversations",
+            "{{direct_conversation_id}}",
+            "unread-summary"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "03.10 - Search Messages (200 Empty Results)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 200 OK\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "pm.test(\"Search returns empty items array\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.items).to.be.an('array').that.is.empty;",
+              "    pm.expect(jsonData.has_more).to.be.false;",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{user_a_token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/v1/conversations/{{direct_conversation_id}}/messages/search?q=test",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "conversations",
+            "{{direct_conversation_id}}",
+            "messages",
+            "search"
+          ],
+          "query": [
+            {
+              "key": "q",
+              "value": "test"
+            }
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "03.11 - Search Messages Validation Failure on Empty Query (422)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 422 Unprocessable Entity\", function () {",
+              "    pm.response.to.have.status(422);",
+              "});",
+              "pm.test(\"Error code is VALIDATION_ERROR\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.error.code).to.eql(\"VALIDATION_ERROR\");",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{user_a_token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/v1/conversations/{{direct_conversation_id}}/messages/search?q=",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "conversations",
+            "{{direct_conversation_id}}",
+            "messages",
+            "search"
+          ],
+          "query": [
+            {
+              "key": "q",
+              "value": ""
+            }
+          ]
+        }
+      },
+      "response": []
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+# WebChat SOA - Trivy Vulnerability Ignore List
+# Format: CVE-YYYY-NNNNN (one per line)
+#
+# Each entry MUST document:
+# 1. Package / component
+# 2. Risk assessment & reason for deferral
+# 3. Tracking upstream issue or bug report
+# 4. Expiration / review date
+#
+# Note: Base image unfixed CVEs are filtered via --ignore-unfixed.
+# Patched OS packages are upgraded via Dockerfile apt-get upgrade.
+# Keep this file empty unless an unpatchable fixed CVE emerges.

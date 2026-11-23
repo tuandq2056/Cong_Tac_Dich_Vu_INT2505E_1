@@ -1,0 +1,379 @@
+asyncapi: 3.0.0
+info:
+  title: WebChat WebSocket API
+  version: 1.0.0
+  description: |
+    WebSocket contract for the WebChat course project. Derived from
+    `docs/spec/webchat-api-spec.md` v1.0.0 (2026-11-20) because the original `asyncapi.yaml` was not
+    supplied. The document is written from the Chat service's point of view: `receive` is a frame from
+    the browser, `send` is a frame from Chat.
+
+    Transport: one UTF-8 JSON object per text frame, at most 32 KiB. The first frame must be
+    `session.authenticate` within 5 seconds.
+
+    Close codes: `1000` normal, `1003` binary frame, `1009` frame too large, `4408` authentication
+    timeout, `4401` token no longer valid.
+
+    `Message` and `TextContent` are the same schemas as the REST contract in `openapi.yaml`; they are
+    referenced, not copied.
+defaultContentType: application/json
+servers:
+  local:
+    host: localhost:8080
+    protocol: ws
+    description: Local docker compose stack. Production uses wss on the same path.
+channels:
+  chat:
+    address: /ws/v1/chat
+    description: |
+      One conversation-multiplexed session. A socket may subscribe to several conversations; each
+      subscription receives the events of that conversation. The connection carries no binary frames.
+    messages:
+      sessionAuthenticate:
+        $ref: '#/components/messages/SessionAuthenticate'
+      conversationSubscribe:
+        $ref: '#/components/messages/ConversationSubscribe'
+      conversationUnsubscribe:
+        $ref: '#/components/messages/ConversationUnsubscribe'
+      messageSend:
+        $ref: '#/components/messages/MessageSend'
+      sessionReady:
+        $ref: '#/components/messages/SessionReady'
+      conversationSubscribed:
+        $ref: '#/components/messages/ConversationSubscribed'
+      conversationUnsubscribed:
+        $ref: '#/components/messages/ConversationUnsubscribed'
+      messageAck:
+        $ref: '#/components/messages/MessageAck'
+      messageCreated:
+        $ref: '#/components/messages/MessageCreated'
+      error:
+        $ref: '#/components/messages/ErrorFrame'
+operations:
+  receiveFromBrowser:
+    action: receive
+    summary: Commands sent by the browser
+    channel:
+      $ref: '#/channels/chat'
+    messages:
+      - $ref: '#/channels/chat/messages/sessionAuthenticate'
+      - $ref: '#/channels/chat/messages/conversationSubscribe'
+      - $ref: '#/channels/chat/messages/conversationUnsubscribe'
+      - $ref: '#/channels/chat/messages/messageSend'
+  sendToBrowser:
+    action: send
+    summary: Events emitted by Chat
+    channel:
+      $ref: '#/channels/chat'
+    messages:
+      - $ref: '#/channels/chat/messages/sessionReady'
+      - $ref: '#/channels/chat/messages/conversationSubscribed'
+      - $ref: '#/channels/chat/messages/conversationUnsubscribed'
+      - $ref: '#/channels/chat/messages/messageAck'
+      - $ref: '#/channels/chat/messages/messageCreated'
+      - $ref: '#/channels/chat/messages/error'
+components:
+  messages:
+    SessionAuthenticate:
+      name: session.authenticate
+      title: Authenticate the socket
+      summary: Must be the first frame; the server closes with 4408 after 5 seconds.
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/SessionAuthenticate'
+
+    ConversationSubscribe:
+      name: conversation.subscribe
+      title: Subscribe to a conversation
+      summary: |
+        Registers the socket before reading `latest_seq`. The client starts buffering
+        `message.created` when it sends this frame.
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/ConversationSubscribe'
+
+    ConversationUnsubscribe:
+      name: conversation.unsubscribe
+      title: Unsubscribe this socket
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/ConversationUnsubscribe'
+
+    MessageSend:
+      name: message.send
+      title: Send a message
+      summary: |
+        Requires an active subscription and `can_send`. The ACK is emitted only after the message is
+        committed. Retrying with the same `client_message_id` and payload replays the stored message.
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/MessageSend'
+
+    SessionReady:
+      name: session.ready
+      title: Socket authenticated
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/SessionReady'
+
+    ConversationSubscribed:
+      name: conversation.subscribed
+      title: Subscription confirmed
+      summary: "`latest_seq` is the snapshot the client must backfill to."
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/ConversationSubscribed'
+
+    ConversationUnsubscribed:
+      name: conversation.unsubscribed
+      title: Subscription removed
+      summary: Confirmed even when the socket was not subscribed.
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/ConversationUnsubscribed'
+
+    MessageAck:
+      name: message.ack
+      title: Message committed
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/MessageAck'
+
+    MessageCreated:
+      name: message.created
+      title: Message broadcast
+      summary: |
+        Sent to every subscribed socket of the conversation, including the sender. The client merges
+        ACK and event by `message.id`.
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/MessageCreated'
+
+    ErrorFrame:
+      name: error
+      title: Command or session error
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/ErrorFrame'
+
+  schemas:
+    Uuid:
+      type: string
+      format: uuid
+
+    Seq:
+      type: integer
+      format: int64
+      minimum: 0
+      maximum: 9007199254740991
+
+    RequestId:
+      type: string
+      format: uuid
+      description: Client-generated for commands, echoed by the server.
+
+    PublicUser:
+      type: object
+      additionalProperties: false
+      required: [id, username]
+      properties:
+        id: { $ref: '#/components/schemas/Uuid' }
+        username: { type: string }
+
+    TextContent:
+      type: object
+      additionalProperties: false
+      required: [type, text]
+      properties:
+        type: { type: string, enum: [text] }
+        text: { type: string, minLength: 1, maxLength: 4000 }
+
+    Attachment:
+      type: object
+      additionalProperties: false
+      required: [id, kind, file_name, media_type, byte_size]
+      properties:
+        id: { $ref: '#/components/schemas/Uuid' }
+        kind: { type: string, enum: [audio, file] }
+        file_name: { type: string }
+        media_type: { type: string }
+        byte_size: { type: integer, minimum: 1 }
+        duration_ms:
+          type: integer
+          minimum: 0
+          maximum: 300000
+          description: Present only when kind=audio.
+
+    StoredAudioContent:
+      type: object
+      additionalProperties: false
+      required: [type, attachment]
+      properties:
+        type: { type: string, enum: [audio] }
+        attachment: { $ref: '#/components/schemas/Attachment' }
+
+    StoredFileContent:
+      type: object
+      additionalProperties: false
+      required: [type, attachment]
+      properties:
+        type: { type: string, enum: [file] }
+        attachment: { $ref: '#/components/schemas/Attachment' }
+
+    SentAudioContent:
+      type: object
+      additionalProperties: false
+      required: [type, attachment_id]
+      properties:
+        type: { type: string, enum: [audio] }
+        attachment_id: { $ref: '#/components/schemas/Uuid' }
+
+    SentFileContent:
+      type: object
+      additionalProperties: false
+      required: [type, attachment_id]
+      properties:
+        type: { type: string, enum: [file] }
+        attachment_id: { $ref: '#/components/schemas/Uuid' }
+
+    SendContent:
+      oneOf:
+        - $ref: '#/components/schemas/TextContent'
+        - $ref: '#/components/schemas/SentAudioContent'
+        - $ref: '#/components/schemas/SentFileContent'
+
+    MessageContent:
+      oneOf:
+        - $ref: '#/components/schemas/TextContent'
+        - $ref: '#/components/schemas/StoredAudioContent'
+        - $ref: '#/components/schemas/StoredFileContent'
+
+    Message:
+      type: object
+      additionalProperties: false
+      required: [id, conversation_id, seq, sender, created_at, client_message_id, content]
+      properties:
+        id: { $ref: '#/components/schemas/Uuid' }
+        conversation_id: { $ref: '#/components/schemas/Uuid' }
+        seq: { type: integer, format: int64, minimum: 1, maximum: 9007199254740991 }
+        sender: { $ref: '#/components/schemas/PublicUser' }
+        created_at: { type: string, format: date-time }
+        client_message_id: { $ref: '#/components/schemas/Uuid' }
+        content: { $ref: '#/components/schemas/MessageContent' }
+
+    SessionAuthenticate:
+      type: object
+      additionalProperties: false
+      required: [type, request_id, access_token]
+      properties:
+        type: { type: string, enum: [session.authenticate] }
+        request_id: { $ref: '#/components/schemas/RequestId' }
+        access_token: { type: string }
+
+    ConversationSubscribe:
+      type: object
+      additionalProperties: false
+      required: [type, request_id, conversation_id]
+      properties:
+        type: { type: string, enum: [conversation.subscribe] }
+        request_id: { $ref: '#/components/schemas/RequestId' }
+        conversation_id: { $ref: '#/components/schemas/Uuid' }
+
+    ConversationUnsubscribe:
+      type: object
+      additionalProperties: false
+      required: [type, request_id, conversation_id]
+      properties:
+        type: { type: string, enum: [conversation.unsubscribe] }
+        request_id: { $ref: '#/components/schemas/RequestId' }
+        conversation_id: { $ref: '#/components/schemas/Uuid' }
+
+    MessageSend:
+      type: object
+      additionalProperties: false
+      required: [type, request_id, conversation_id, client_message_id, content]
+      properties:
+        type: { type: string, enum: [message.send] }
+        request_id: { $ref: '#/components/schemas/RequestId' }
+        conversation_id: { $ref: '#/components/schemas/Uuid' }
+        client_message_id: { $ref: '#/components/schemas/Uuid' }
+        content: { $ref: '#/components/schemas/SendContent' }
+
+    SessionReady:
+      type: object
+      additionalProperties: false
+      required: [type, request_id, session_id, user_id, expires_at]
+      properties:
+        type: { type: string, enum: [session.ready] }
+        request_id: { $ref: '#/components/schemas/RequestId' }
+        session_id: { $ref: '#/components/schemas/Uuid' }
+        user_id: { $ref: '#/components/schemas/Uuid' }
+        expires_at: { type: string, format: date-time }
+
+    ConversationSubscribed:
+      type: object
+      additionalProperties: false
+      required: [type, request_id, conversation_id, latest_seq]
+      properties:
+        type: { type: string, enum: [conversation.subscribed] }
+        request_id: { $ref: '#/components/schemas/RequestId' }
+        conversation_id: { $ref: '#/components/schemas/Uuid' }
+        latest_seq: { $ref: '#/components/schemas/Seq' }
+
+    ConversationUnsubscribed:
+      type: object
+      additionalProperties: false
+      required: [type, request_id, conversation_id]
+      properties:
+        type: { type: string, enum: [conversation.unsubscribed] }
+        request_id: { $ref: '#/components/schemas/RequestId' }
+        conversation_id: { $ref: '#/components/schemas/Uuid' }
+
+    MessageAck:
+      type: object
+      additionalProperties: false
+      required: [type, request_id, message, replayed]
+      properties:
+        type: { type: string, enum: [message.ack] }
+        request_id: { $ref: '#/components/schemas/RequestId' }
+        message: { $ref: '#/components/schemas/Message' }
+        replayed: { type: boolean }
+
+    MessageCreated:
+      type: object
+      additionalProperties: false
+      required: [type, message]
+      properties:
+        type: { type: string, enum: [message.created] }
+        message: { $ref: '#/components/schemas/Message' }
+
+    ErrorCode:
+      type: string
+      enum:
+        - INVALID_FRAME
+        - VALIDATION_ERROR
+        - UNAUTHENTICATED
+        - ALREADY_AUTHENTICATED
+        - NOT_SUBSCRIBED
+        - CONVERSATION_NOT_FOUND
+        - FRIENDSHIP_REQUIRED
+        - ATTACHMENT_NOT_FOUND
+        - ATTACHMENT_KIND_MISMATCH
+        - ATTACHMENT_IN_USE
+        - CLIENT_MESSAGE_ID_CONFLICT
+        - SOCIAL_UNAVAILABLE
+        - CHAT_UNAVAILABLE
+
+    ErrorFrame:
+      type: object
+      additionalProperties: false
+      required: [type, request_id, code, message, retryable]
+      properties:
+        type: { type: string, enum: [error] }
+        request_id:
+          type: [string, 'null']
+          format: uuid
+          description: Null when the frame did not contain a readable UUID.
+        code: { $ref: '#/components/schemas/ErrorCode' }
+        message: { type: string }
+        retryable: { type: boolean }

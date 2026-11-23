@@ -1,0 +1,51 @@
+id: websocket-timeout
+
+info:
+  name: WebSocket Unauthenticated Session Timeout & Auth Gate
+  author: devsecops
+  severity: high
+  description: |
+    Verifies that unauthenticated WebSocket connections to /ws/v1/chat cannot perform
+    session operations and must authenticate within 5 seconds before timeout disconnect (code 4408).
+  reference:
+    - contracts/asyncapi.yaml
+    - CLAUDE.md
+  classification:
+    cwe-id: CWE-287,CWE-400
+  metadata:
+    max-request: 2
+    component: chat
+  tags: websocket,chat,timeout,dast,security
+
+websocket:
+  # Case 1: Attempt unauthenticated command without session.authenticate
+  - address: "{{Scheme}}://{{Hostname}}/ws/v1/chat"
+    inputs:
+      - data: '{"type":"message.send","request_id":"00000000-0000-4000-8000-000000000001","conversation_id":"00000000-0000-4000-8000-000000000000","client_message_id":"00000000-0000-4000-8000-000000000002","content":{"type":"text","text":"hello"}}'
+
+    matchers-condition: or
+    matchers:
+      - type: dsl
+        name: unauthenticated-command-executed
+        dsl:
+          - 'contains(response, "session.ready") || contains(response, "message.ack") || contains(response, "message.created")'
+        condition: and
+
+      - type: dsl
+        name: websocket-server-error
+        dsl:
+          - 'contains(response, "Traceback") || contains(response, "Internal Server Error")'
+        condition: and
+
+  # Case 2: Connection without session.authenticate must disconnect within 5 seconds (CLAUDE.md limit)
+  - address: "{{Scheme}}://{{Hostname}}/ws/v1/chat"
+    inputs:
+      - data: '{"type":"message.send","request_id":"00000000-0000-4000-8000-000000000003","conversation_id":"00000000-0000-4000-8000-000000000000","client_message_id":"00000000-0000-4000-8000-000000000004","content":{"type":"text","text":"timeout-test"},"wait":"{{wait_for(6)}}"}'
+
+    matchers-condition: or
+    matchers:
+      - type: dsl
+        name: authentication-timeout-not-enforced
+        dsl:
+          - 'contains(response, "UNAUTHENTICATED") || contains(response, "error") || contains(response, "message.ack")'
+        condition: and

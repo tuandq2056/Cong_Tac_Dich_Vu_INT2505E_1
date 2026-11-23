@@ -1,0 +1,748 @@
+{
+  "info": {
+    "_postman_id": "a1b2c3d4-e5f6-4a1b-8c2d-3e4f5a6b7c8d",
+    "name": "01_auth",
+    "description": "Identity and Authentication API test collection for WebChat SOA",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "01.01 - Register User A",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 201 Created\", function () {",
+              "    pm.response.to.have.status(201);",
+              "});",
+              "pm.test(\"Response contains PublicUser with id and normalized username\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData).to.have.property('id');",
+              "    pm.expect(jsonData.id).to.be.a('string').and.not.empty;",
+              "    pm.expect(jsonData).to.have.property('username');",
+              "    pm.expect(jsonData.username).to.eql(pm.environment.get(\"user_a_username\"));",
+              "    pm.environment.set(\"user_a_id\", jsonData.id);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"{{user_a_username}}\",\n  \"password\": \"{{user_a_password}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{base_url}}/api/v1/auth/register",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "auth",
+            "register"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "01.02 - Register User B",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 201 Created\", function () {",
+              "    pm.response.to.have.status(201);",
+              "});",
+              "pm.test(\"Response contains PublicUser for User B\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.id).to.be.a('string').and.not.empty;",
+              "    pm.expect(jsonData.username).to.eql(pm.environment.get(\"user_b_username\"));",
+              "    pm.environment.set(\"user_b_id\", jsonData.id);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"{{user_b_username}}\",\n  \"password\": \"{{user_b_password}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{base_url}}/api/v1/auth/register",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "auth",
+            "register"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "01.03 - Register User C",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 201 Created\", function () {",
+              "    pm.response.to.have.status(201);",
+              "});",
+              "pm.test(\"Response contains PublicUser for User C\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.id).to.be.a('string').and.not.empty;",
+              "    pm.expect(jsonData.username).to.eql(pm.environment.get(\"user_c_username\"));",
+              "    pm.environment.set(\"user_c_id\", jsonData.id);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"{{user_c_username}}\",\n  \"password\": \"{{user_c_password}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{base_url}}/api/v1/auth/register",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "auth",
+            "register"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "01.04 - Collision Check (Case-Insensitive)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 409 Conflict\", function () {",
+              "    pm.response.to.have.status(409);",
+              "});",
+              "pm.test(\"Error response code is USERNAME_TAKEN\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData).to.have.property('request_id');",
+              "    pm.expect(jsonData).to.have.property('error');",
+              "    pm.expect(jsonData.error.code).to.eql(\"USERNAME_TAKEN\");",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"BINH\",\n  \"password\": \"password123\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{base_url}}/api/v1/auth/register",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "auth",
+            "register"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "01.05 - Validation Failure (Invalid Username)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 422 Unprocessable Entity\", function () {",
+              "    pm.response.to.have.status(422);",
+              "});",
+              "pm.test(\"Error response code is VALIDATION_ERROR\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData).to.have.property('request_id');",
+              "    pm.expect(jsonData).to.have.property('error');",
+              "    pm.expect(jsonData.error.code).to.eql(\"VALIDATION_ERROR\");",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"a!\",\n  \"password\": \"password123\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{base_url}}/api/v1/auth/register",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "auth",
+            "register"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "01.06 - Login User A (Success)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 200 OK\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "pm.test(\"TokenResponse conforms to schema\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.access_token).to.be.a('string').and.not.empty;",
+              "    pm.expect(jsonData.token_type).to.eql(\"Bearer\");",
+              "    pm.expect(jsonData.expires_in).to.be.a('number').and.at.least(1);",
+              "    pm.expect(jsonData.user.id).to.eql(pm.environment.get(\"user_a_id\"));",
+              "    pm.expect(jsonData.user.username).to.eql(pm.environment.get(\"user_a_username\"));",
+              "    pm.environment.set(\"user_a_token\", jsonData.access_token);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"{{user_a_username}}\",\n  \"password\": \"{{user_a_password}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{base_url}}/api/v1/auth/login",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "auth",
+            "login"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "01.07 - Login User B (Success)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 200 OK\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "pm.test(\"TokenResponse sets user_b_token\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.access_token).to.be.a('string').and.not.empty;",
+              "    pm.expect(jsonData.user.id).to.eql(pm.environment.get(\"user_b_id\"));",
+              "    pm.environment.set(\"user_b_token\", jsonData.access_token);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"{{user_b_username}}\",\n  \"password\": \"{{user_b_password}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{base_url}}/api/v1/auth/login",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "auth",
+            "login"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "01.08 - Login User C (Success)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 200 OK\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "pm.test(\"TokenResponse sets user_c_token\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.access_token).to.be.a('string').and.not.empty;",
+              "    pm.expect(jsonData.user.id).to.eql(pm.environment.get(\"user_c_id\"));",
+              "    pm.environment.set(\"user_c_token\", jsonData.access_token);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"{{user_c_username}}\",\n  \"password\": \"{{user_c_password}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{base_url}}/api/v1/auth/login",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "auth",
+            "login"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "01.09 - Login Invalid Credentials",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 401 Unauthorized\", function () {",
+              "    pm.response.to.have.status(401);",
+              "});",
+              "pm.test(\"Error response code is INVALID_CREDENTIALS\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.error.code).to.eql(\"INVALID_CREDENTIALS\");",
+              "    pm.expect(jsonData.request_id).to.be.a('string');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"{{user_a_username}}\",\n  \"password\": \"wrongpassword999\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{base_url}}/api/v1/auth/login",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "auth",
+            "login"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "01.10 - User Profile (/users/me with Token)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 200 OK\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "pm.test(\"Profile matches User A\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.id).to.eql(pm.environment.get(\"user_a_id\"));",
+              "    pm.expect(jsonData.username).to.eql(pm.environment.get(\"user_a_username\"));",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{user_a_token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/v1/users/me",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "users",
+            "me"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "01.11 - User Profile (/users/me without Token)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 401 Unauthorized\", function () {",
+              "    pm.response.to.have.status(401);",
+              "});",
+              "pm.test(\"Error code is UNAUTHENTICATED\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.error.code).to.eql(\"UNAUTHENTICATED\");",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/api/v1/users/me",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "users",
+            "me"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "01.12 - Username Lookup Case-Insensitive",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 200 OK\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "pm.test(\"User returned is user_b\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.id).to.eql(pm.environment.get(\"user_b_id\"));",
+              "    pm.expect(jsonData.username).to.eql(\"binh\");",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{user_a_token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/v1/users/by-username/BINH",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "users",
+            "by-username",
+            "BINH"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "01.13 - Username Lookup Not Found (404)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 404 Not Found\", function () {",
+              "    pm.response.to.have.status(404);",
+              "});",
+              "pm.test(\"Error code is USER_NOT_FOUND\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.error.code).to.eql(\"USER_NOT_FOUND\");",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{user_a_token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/v1/users/by-username/nonexistent_user_99999",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "users",
+            "by-username",
+            "nonexistent_user_99999"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "01.14 - Google Auth Start (501 Disabled)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 501 Not Implemented\", function () {",
+              "    pm.response.to.have.status(501);",
+              "});",
+              "pm.test(\"Error code is GOOGLE_DISABLED\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.error.code).to.eql(\"GOOGLE_DISABLED\");",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/api/v1/auth/google/start",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "auth",
+            "google",
+            "start"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "01.15 - Google Auth Exchange (501 Disabled)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 501 Not Implemented\", function () {",
+              "    pm.response.to.have.status(501);",
+              "});",
+              "pm.test(\"Error code is GOOGLE_DISABLED\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.error.code).to.eql(\"GOOGLE_DISABLED\");",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"code\": \"mock_code\",\n  \"state\": \"mock_state\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{base_url}}/api/v1/auth/google/exchange",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "auth",
+            "google",
+            "exchange"
+          ]
+        }
+      },
+      "response": []
+    }
+  ]
+}

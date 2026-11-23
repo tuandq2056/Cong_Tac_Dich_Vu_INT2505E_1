@@ -1,0 +1,83 @@
+id: jwt-audience-separation
+
+info:
+  name: JWT Audience Separation and Authentication Validation
+  author: devsecops
+  severity: high
+  description: |
+    Verifies that public API endpoints reject missing, malformed, expired, alg:none,
+    and cross-audience internal service tokens with HTTP 401 Unauthorized, adhering to ADR 0003.
+  reference:
+    - docs/adr/0003-token-model.md
+    - CLAUDE.md
+  classification:
+    cwe-id: CWE-287,CWE-347,CWE-613
+  metadata:
+    max-request: 6
+    component: identity
+  tags: jwt,auth,audience,dast,security
+
+http:
+  - raw:
+      # Case 1: Missing Authorization header
+      - |
+        GET /api/v1/users/me HTTP/1.1
+        Host: {{Hostname}}
+        Accept: application/json
+
+      # Case 2: Malformed / Garbage JWT token
+      - |
+        GET /api/v1/users/me HTTP/1.1
+        Host: {{Hostname}}
+        Authorization: Bearer not.a.valid.token
+        Accept: application/json
+
+      # Case 3: Algorithm 'none' exploit attempt
+      - |
+        GET /api/v1/users/me HTTP/1.1
+        Host: {{Hostname}}
+        Authorization: Bearer eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJzdWIiOiIwMDAwMDAwMC0wMDAwLTQwMDAtODAwMC0wMDAwMDAwMDAwMDEiLCJ1c2VybmFtZSI6ImF0dGFja2VyIiwiYXVkIjoid2ViY2hhdCIsImlzcyI6IndlYmNoYXQtaWRlbnRpdHkiLCJleHAiOjE5OTk5OTk5OTl9.
+        Accept: application/json
+
+      # Case 4: Cross-audience internal service token (aud=identity-internal) signed with dev-only-change-me
+      - |
+        GET /api/v1/users/me HTTP/1.1
+        Host: {{Hostname}}
+        Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJzb2NpYWwiLCJhdWQiOiJpZGVudGl0eS1pbnRlcm5hbCIsImlzcyI6IndlYmNoYXQtc29jaWFsIiwiZXhwIjoxOTk5OTk5OTk5fQ.VEPcVaZRaLZwzQnNYoPL7uZQt6Xx7aApsbFt7JKX2WA
+        Accept: application/json
+
+      # Case 5: Cross-audience internal service token signed with dev-only-service-secret
+      - |
+        GET /api/v1/users/me HTTP/1.1
+        Host: {{Hostname}}
+        Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJzb2NpYWwiLCJhdWQiOiJpZGVudGl0eS1pbnRlcm5hbCIsImlzcyI6IndlYmNoYXQtc29jaWFsIiwiZXhwIjoxOTk5OTk5OTk5fQ.onnNlIFXqwfhSVrHbXMSD7sZe0redsgHgfR311X8NkM
+        Accept: application/json
+
+      # Case 6: Expired token with valid dev-only-change-me HMAC signature (exp in 2018)
+      - |
+        GET /api/v1/users/me HTTP/1.1
+        Host: {{Hostname}}
+        Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIwMDAwMDAwMC0wMDAwLTQwMDAtODAwMC0wMDAwMDAwMDAwMDEiLCJ1c2VybmFtZSI6ImFsaWNlIiwiYXVkIjoid2ViY2hhdCIsImlzcyI6IndlYmNoYXQtaWRlbnRpdHkiLCJleHAiOjE1MTQ3NjQ4MDB9.BsXIHCCThbLXTK0yROSjE1HSH9BHE8sldYNR-kaou3s
+        Accept: application/json
+
+    stop-at-first-match: false
+    matchers-condition: or
+    matchers:
+      - type: dsl
+        name: auth-bypass-detected
+        dsl:
+          - "status_code == 200 || status_code == 201 || status_code == 204"
+        condition: and
+
+      - type: dsl
+        name: server-crash-on-invalid-jwt
+        dsl:
+          - "status_code == 500"
+        condition: and
+
+      - type: dsl
+        name: missing-error-response-envelope
+        dsl:
+          - "status_code == 401"
+          - "!contains(body, 'UNAUTHENTICATED') && !contains(body, 'INVALID_CREDENTIALS') && !contains(body, 'error')"
+        condition: and

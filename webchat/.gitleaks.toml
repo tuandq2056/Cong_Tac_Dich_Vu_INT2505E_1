@@ -1,0 +1,54 @@
+title = "WebChat SOA Gitleaks Configuration"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Global allowlist for test fixtures, mock credentials, and development defaults"
+paths = [
+  '''(?i)(^|/)security/.*''',
+  '''(?i)(^|/)tests/.*''',
+  '''(?i)(^|/)tests/.*/test_.*\.py$''',
+  '''(?i)(^|/)apitest/.*''',
+  '''(?i)(^|/)loadtest/.*''',
+  '''(?i)(^|/)tools/testgen/.*''',
+  '''(?i)(^|/)\.agents/.*''',
+  '''(?i)(^|/)docs/.*''',
+  '''(?i)(^|/)contracts/.*''',
+  '''(?i)(^|/)\.env\.example$''',
+  '''(?i)(^|/)docker-compose\.ya?ml$''',
+  '''(?i)(^|/)package-lock\.json$''',
+  '''(?i)(^|/)node_modules/.*''',
+  '''(?i)(^|/)\.venv/.*'''
+]
+regexes = [
+  '''^dev-only-change-me$''',
+  '''^dev-only-service-secret$''',
+  '''^webchat-identity$''',
+  '''^webchat-social$''',
+  '''^webchat-chat$''',
+  '''^identity-internal$''',
+  '''^social-internal$''',
+  '''^webchat:webchat$''',
+  '''^postgresql\+asyncpg://webchat:webchat@''',
+  '''^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$''',
+  '''^password123$''',
+  '''^testpassword$''',
+  '''^secret123$'''
+]
+
+[[rules]]
+id = "hardcoded-jwt-secret"
+description = "Hardcoded JWT secret detected outside dev defaults"
+regex = '''(?i)(jwt_secret|service_jwt_secret)\s*[:=]\s*["']([A-Za-z0-9_\-+=/]{12,})["']'''
+secretGroup = 2
+keywords = [
+  "jwt_secret",
+  "service_jwt_secret"
+]
+
+[rules.allowlist]
+regexes = [
+  '''^dev-only-change-me$''',
+  '''^dev-only-service-secret$'''
+]

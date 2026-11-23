@@ -1,0 +1,187 @@
+name: WebChat CI Checks
+
+on:
+  push:
+    paths:
+      - 'webchat/**'
+      - '.github/workflows/**'
+  pull_request:
+    paths:
+      - 'webchat/**'
+      - '.github/workflows/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: webchat-checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Backend, web and contracts
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: webchat
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Domain architecture rules (ADR 0001)
+        run: python scripts/check_domain_rules.py
+      - name: Generate unit tests
+        run: python tools/testgen/cli.py
+      - name: Backend tests
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-dev.txt
+          found=0
+          for dir in services/*/; do
+            if [ -f "${dir}pyproject.toml" ]; then
+              found=1
+              echo "::group::${dir}"
+              (cd "$dir" && python -m pytest -q)
+              echo "::endgroup::"
+            fi
+          done
+          if [ "$found" = 0 ]; then
+            echo "::notice::No services/*/pyproject.toml yet; backend tests skipped."
+          fi
+      - name: Backend lint
+        run: ruff check services
+      - name: Web lint, test and build
+        run: |
+          if [ -f web/package.json ]; then
+            cd web
+            npm ci --no-audit --no-fund
+            npm run lint
+            npm test -- --run
+            npm run build
+          else
+            echo "::notice::No web/package.json yet; web checks skipped."
+          fi
+      - name: Contract lint
+        run: |
+          python3 contracts/check_shared.py
+          if [ -f contracts/openapi.yaml ]; then
+            npx --yes @redocly/cli@latest lint contracts/openapi.yaml
+          else
+            echo "::notice::contracts/openapi.yaml is missing; REST contract is unverified."
+          fi
+          if [ -f contracts/asyncapi.yaml ]; then
+            npx --yes @asyncapi/cli@latest validate contracts/asyncapi.yaml
+          else
+            echo "::notice::contracts/asyncapi.yaml is missing; WebSocket contract is unverified."
+          fi
+
+  secrets:
+    name: Gitleaks (full history)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: webchat
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Scan every commit
+        run: >
+          docker run --rm --user "$(id -u):$(id -g)" -v "$PWD":/repo
+          zricethezav/gitleaks:v8.30.0 git /repo --config=/repo/.gitleaks.toml --redact --no-banner
+
+  vulnerabilities:
+    name: Trivy (files, dependencies, image)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: webchat
+    steps:
+      - uses: actions/checkout@v4
+      - name: Files, dependencies and misconfiguration
+        run: >
+          docker run --rm -v "$PWD":/src -w /src aquasec/trivy:0.69.3 fs --quiet
+          --scanners vuln,misconfig,secret --severity CRITICAL,HIGH --ignore-unfixed --exit-code 1 /src
+      - name: Build image
+        if: hashFiles('webchat/services/Dockerfile') != ''
+        run: docker build -f services/Dockerfile --build-arg SERVICE=identity -t webchat:ci .
+      - name: Image
+        if: hashFiles('webchat/services/Dockerfile') != ''
+        run: >
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "$PWD":/repo -w /repo aquasec/trivy:0.69.3 image
+          --quiet --severity CRITICAL,HIGH --ignore-unfixed --exit-code 1 webchat:ci
+
+  api:
+    name: API and WebSocket contract tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: webchat
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-dev.txt
+      - name: Look for the harness
+        id: harness
+        run: |
+          if [ -x apitest/run.sh ]; then echo 'present=true' >> "$GITHUB_OUTPUT"; else echo 'present=false' >> "$GITHUB_OUTPUT"; fi
+      - name: No API harness yet
+        if: steps.harness.outputs.present == 'false'
+        run: echo "::notice::Add an executable apitest/run.sh to enable REST and WebSocket tests."
+      - name: Run API tests
+        if: steps.harness.outputs.present == 'true'
+        run: KEEP_STACK=1 apitest/run.sh
+      - name: Nuclei DAST Security Scanner
+        if: steps.harness.outputs.present == 'true'
+        run: |
+          chmod +x security/nuclei/run-nuclei.sh
+          ./security/nuclei/run-nuclei.sh http://localhost:8080 ws://localhost:8080
+      - name: Service logs on failure
+        if: failure()
+        run: |
+          if [ -f docker-compose.yml ]; then docker compose logs --tail=200; fi
+      - name: Teardown stack
+        if: always()
+        run: |
+          if [ -f docker-compose.yml ]; then docker compose down -v --remove-orphans; fi
+
+  load-smoke:
+    name: Load smoke
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: webchat
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Look for the harness
+        id: harness
+        run: |
+          if [ -x loadtest/run-smoke.sh ]; then echo 'present=true' >> "$GITHUB_OUTPUT"; else echo 'present=false' >> "$GITHUB_OUTPUT"; fi
+      - name: No load harness yet
+        if: steps.harness.outputs.present == 'false'
+        run: echo "::notice::Add an executable loadtest/run-smoke.sh to enable the load smoke test."
+      - name: Run the smoke test
+        if: steps.harness.outputs.present == 'true'
+        run: loadtest/run-smoke.sh
+      - name: Service logs on failure
+        if: failure()
+        run: |
+          if [ -f docker-compose.yml ]; then docker compose logs --tail=200; fi

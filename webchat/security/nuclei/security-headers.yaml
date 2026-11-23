@@ -1,0 +1,53 @@
+id: security-headers
+
+info:
+  name: Missing Security Headers and Information Disclosure Check
+  author: devsecops
+  severity: low
+  description: |
+    Scans public gateway HTTP responses for information leakage (e.g. server banner versions)
+    and missing defense-in-depth security headers (X-Content-Type-Options, X-Frame-Options).
+  reference:
+    - https://owasp.org/www-project-secure-headers/
+    - CLAUDE.md
+  classification:
+    cwe-id: CWE-200,CWE-693
+  metadata:
+    max-request: 2
+    component: gateway
+  tags: headers,misconfig,info-disclosure,dast,security
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/healthz"
+      - "{{BaseURL}}/"
+
+    stop-at-first-match: false
+    matchers-condition: or
+    matchers:
+      - type: dsl
+        name: server-version-leak
+        dsl:
+          - "regex('(?i)server:\\s*nginx/[0-9]', header)"
+        condition: and
+
+      - type: dsl
+        name: technology-leak-powered-by
+        dsl:
+          - "regex('(?i)x-powered-by', header)"
+        condition: and
+
+      - type: dsl
+        name: missing-x-content-type-options
+        dsl:
+          - "!regex('(?i)x-content-type-options', header)"
+          - "status_code == 200"
+        condition: and
+
+      - type: dsl
+        name: missing-x-frame-options
+        dsl:
+          - "!regex('(?i)x-frame-options', header)"
+          - "status_code == 200"
+        condition: and

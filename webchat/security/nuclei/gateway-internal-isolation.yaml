@@ -1,0 +1,43 @@
+id: gateway-internal-isolation
+
+info:
+  name: Gateway Internal Endpoint Isolation Check
+  author: devsecops
+  severity: high
+  description: |
+    Verifies that the Nginx API gateway strictly blocks and isolates all /internal/ routes,
+    returning HTTP 404 with standard JSON error body, preventing exposure of internal microservice APIs.
+  reference:
+    - docs/adr/0001-service-boundaries-and-monorepo.md
+    - CLAUDE.md
+  classification:
+    cwe-id: CWE-200,CWE-284
+  metadata:
+    max-request: 5
+    component: gateway
+  tags: gateway,isolation,internal,dast,security
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/internal/"
+      - "{{BaseURL}}/internal/v1/users/00000000-0000-4000-8000-000000000000"
+      - "{{BaseURL}}/internal/v1/conversations/direct"
+      - "{{BaseURL}}/internal/v1/healthz"
+      - "{{BaseURL}}/api/v1/auth/../../internal/v1/users/00000000-0000-4000-8000-000000000000"
+
+    stop-at-first-match: false
+    matchers-condition: or
+    matchers:
+      - type: dsl
+        name: internal-route-exposed
+        dsl:
+          - "status_code != 404"
+        condition: and
+
+      - type: dsl
+        name: missing-404-json-body
+        dsl:
+          - "status_code == 404"
+          - "!contains(body, 'CONVERSATION_NOT_FOUND')"
+        condition: and

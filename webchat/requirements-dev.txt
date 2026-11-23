@@ -1,0 +1,11 @@
+# Shared development dependencies for the three services.
+# Each service also declares its runtime dependencies in its own pyproject.toml.
+fastapi>=0.115
+httpx>=0.28
+mypy>=1.13
+pydantic-settings>=2.6
+pyjwt>=2.8
+pytest>=8.3
+ruff>=0.8
+schemathesis>=3.35
+uvicorn[standard]>=0.32

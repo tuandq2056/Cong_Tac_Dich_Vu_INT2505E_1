@@ -1,0 +1,138 @@
+name: webchat
+
+x-service-base: &service-base
+  build:
+    context: .
+    dockerfile: services/Dockerfile
+  restart: unless-stopped
+  healthcheck:
+    test:
+      - CMD
+      - python
+      - -c
+      - import urllib.request; urllib.request.urlopen('http://localhost:8000/healthz')
+    interval: 5s
+    timeout: 3s
+    retries: 12
+
+x-db-base: &db-base
+  image: postgres:16-alpine
+  restart: unless-stopped
+  environment:
+    POSTGRES_USER: ${POSTGRES_USER:-webchat}
+    POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-webchat}
+  healthcheck:
+    test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-webchat} -d $$POSTGRES_DB"]
+    interval: 5s
+    timeout: 3s
+    retries: 12
+
+services:
+  db-identity:
+    <<: *db-base
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-webchat}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-webchat}
+      POSTGRES_DB: identity
+    volumes: [identity-data:/var/lib/postgresql/data]
+
+  db-social:
+    <<: *db-base
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-webchat}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-webchat}
+      POSTGRES_DB: social
+    volumes: [social-data:/var/lib/postgresql/data]
+
+  db-chat:
+    <<: *db-base
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-webchat}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-webchat}
+      POSTGRES_DB: chat
+    volumes: [chat-data:/var/lib/postgresql/data]
+
+  identity:
+    <<: *service-base
+    build:
+      context: .
+      dockerfile: services/Dockerfile
+      args: { SERVICE: identity }
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-webchat}:${POSTGRES_PASSWORD:-webchat}@db-identity:5432/identity
+      WEBCHAT_JWT_SECRET: ${WEBCHAT_JWT_SECRET:-dev-only-change-me}
+      WEBCHAT_JWT_ISSUER: ${WEBCHAT_JWT_ISSUER:-webchat-identity}
+      WEBCHAT_JWT_AUDIENCE: ${WEBCHAT_JWT_AUDIENCE:-webchat}
+      GOOGLE_ENABLED: ${GOOGLE_ENABLED:-false}
+    ports: ["8001:8000"]
+    depends_on:
+      db-identity: { condition: service_healthy }
+
+  social:
+    <<: *service-base
+    build:
+      context: .
+      dockerfile: services/Dockerfile
+      args: { SERVICE: social }
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-webchat}:${POSTGRES_PASSWORD:-webchat}@db-social:5432/social
+      IDENTITY_URL: http://identity:8000
+      WEBCHAT_JWT_SECRET: ${WEBCHAT_JWT_SECRET:-dev-only-change-me}
+      WEBCHAT_JWT_ISSUER: ${WEBCHAT_JWT_ISSUER:-webchat-identity}
+      WEBCHAT_JWT_AUDIENCE: ${WEBCHAT_JWT_AUDIENCE:-webchat}
+      SERVICE_JWT_SECRET: ${SERVICE_JWT_SECRET:-dev-only-service-secret}
+      IDENTITY_INTERNAL_AUDIENCE: ${IDENTITY_INTERNAL_AUDIENCE:-identity-internal}
+    ports: ["8002:8000"]
+    depends_on:
+      db-social: { condition: service_healthy }
+      identity: { condition: service_healthy }
+
+  chat:
+    <<: *service-base
+    build:
+      context: .
+      dockerfile: services/Dockerfile
+      args: { SERVICE: chat }
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-webchat}:${POSTGRES_PASSWORD:-webchat}@db-chat:5432/chat
+      SOCIAL_URL: http://social:8000
+      WEBCHAT_JWT_SECRET: ${WEBCHAT_JWT_SECRET:-dev-only-change-me}
+      WEBCHAT_JWT_ISSUER: ${WEBCHAT_JWT_ISSUER:-webchat-identity}
+      WEBCHAT_JWT_AUDIENCE: ${WEBCHAT_JWT_AUDIENCE:-webchat}
+      SERVICE_JWT_SECRET: ${SERVICE_JWT_SECRET:-dev-only-service-secret}
+      SOCIAL_INTERNAL_AUDIENCE: ${SOCIAL_INTERNAL_AUDIENCE:-social-internal}
+      ATTACHMENT_ROOT: /var/lib/webchat/attachments
+    volumes: [chat-attachments:/var/lib/webchat/attachments]
+    ports: ["8003:8000"]
+    depends_on:
+      db-chat: { condition: service_healthy }
+      social: { condition: service_healthy }
+
+  gateway:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    volumes:
+      - ./gateway/nginx.conf:/etc/nginx/nginx.conf:ro
+    ports: ["8080:80"]
+    depends_on:
+      identity: { condition: service_healthy }
+      social: { condition: service_healthy }
+      chat: { condition: service_healthy }
+
+  web:
+    image: node:22-alpine
+    working_dir: /app
+    command: sh -c "npm ci && npm run dev -- --host 0.0.0.0"
+    environment:
+      VITE_GATEWAY_URL: http://gateway:80
+    volumes:
+      - ./web:/app
+    ports: ["5173:5173"]
+    depends_on:
+      gateway: { condition: service_started }
+
+volumes:
+  identity-data:
+  social-data:
+  chat-data:
+  chat-attachments:
