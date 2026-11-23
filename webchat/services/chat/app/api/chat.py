@@ -61,7 +61,6 @@ def to_message_schema(m: StoredMessage) -> Message:
     sender = PublicUser(
         id=m.sender_id,
         username=f"user_{str(m.sender_id)[:8]}",
-        created_at=format_utc_z(m.created_at),
     )
     if m.content_type == "text":
         content = TextContent(type="text", text=m.text_content or "")

@@ -38,7 +38,6 @@ def test_register_and_login_flow(client: TestClient) -> None:
     data = reg_resp.json()
     assert data["username"] == "alice"
     assert "id" in data
-    assert data["created_at"].endswith("Z")
     user_id = data["id"]
 
     # 2. Case-insensitive collision check
@@ -65,7 +64,7 @@ def test_register_and_login_flow(client: TestClient) -> None:
     assert login_resp.status_code == 200
     login_data = login_resp.json()
     token = login_data["access_token"]
-    assert login_data["token_type"] == "bearer"
+    assert login_data["token_type"] == "Bearer"
     assert login_data["expires_in"] == 3600
     assert login_data["user"]["id"] == user_id
 

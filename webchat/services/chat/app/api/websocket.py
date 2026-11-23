@@ -278,7 +278,6 @@ async def chat_websocket(
                             "sender": {
                                 "id": str(user_id),
                                 "username": username,
-                                "created_at": format_utc_z(stored_msg.created_at),
                             },
                             "content": content,
                             "created_at": format_utc_z(stored_msg.created_at),

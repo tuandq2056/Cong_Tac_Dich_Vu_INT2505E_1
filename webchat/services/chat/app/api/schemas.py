@@ -18,7 +18,6 @@ class PublicUser(BaseModel):
 
     id: uuid.UUID
     username: str
-    created_at: str
 
 
 class Attachment(BaseModel):

@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, Path
 
 from app.adapters.repository import UserRepository, get_repository
 from app.api.dependencies import get_current_user
-from app.api.schemas import PublicUserResponse, format_utc_z
+from app.api.schemas import PublicUserResponse
 from app.domain.exceptions import UserNotFoundError
 from app.domain.models import User, normalize_username
 from app.settings import Settings, get_settings
@@ -27,7 +27,6 @@ async def get_me(
     return PublicUserResponse(
         id=current_user.id,
         username=current_user.username,
-        created_at=format_utc_z(current_user.created_at),
     )
 
 
@@ -52,5 +51,4 @@ async def get_user_by_username(
     return PublicUserResponse(
         id=user.id,
         username=user.username,
-        created_at=format_utc_z(user.created_at),
     )

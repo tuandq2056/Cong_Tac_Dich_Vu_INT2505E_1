@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, Response, status
@@ -36,14 +35,12 @@ async def enrich_user(user_id: uuid.UUID, id_client: IdentityClient) -> PublicUs
         return PublicUser(
             id=uuid.UUID(str(data["id"])),
             username=data["username"],
-            created_at=data["created_at"],
         )
     except Exception:
         # Fallback for unit testing if user not seeded in identity client
         return PublicUser(
             id=user_id,
             username=f"user_{str(user_id)[:8]}",
-            created_at=datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         )
 
 

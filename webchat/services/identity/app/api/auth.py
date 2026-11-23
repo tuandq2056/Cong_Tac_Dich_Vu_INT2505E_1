@@ -17,7 +17,6 @@ from app.api.schemas import (
     GoogleExchangeRequest,
     PublicUserResponse,
     TokenResponse,
-    format_utc_z,
 )
 from app.domain.exceptions import (
     GoogleDisabledError,
@@ -51,7 +50,6 @@ async def register(
     return PublicUserResponse(
         id=saved_user.id,
         username=saved_user.username,
-        created_at=format_utc_z(saved_user.created_at),
     )
 
 
@@ -84,12 +82,11 @@ async def login(
     token = create_access_token(user.id, user.username, settings)
     return TokenResponse(
         access_token=token,
-        token_type="bearer",
+        token_type="Bearer",
         expires_in=3600,
         user=PublicUserResponse(
             id=user.id,
             username=user.username,
-            created_at=format_utc_z(user.created_at),
         ),
     )
 

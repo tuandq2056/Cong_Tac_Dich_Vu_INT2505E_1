@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -25,14 +26,13 @@ class PublicUserResponse(BaseModel):
 
     id: uuid.UUID
     username: str
-    created_at: str
 
 
 class TokenResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     access_token: str
-    token_type: str = "bearer"
+    token_type: Literal["Bearer"] = "Bearer"
     expires_in: int = 3600
     user: PublicUserResponse
 

@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, Path
 
 from app.adapters.repository import UserRepository, get_repository
 from app.api.dependencies import verify_internal_service
-from app.api.schemas import PublicUserResponse, format_utc_z
+from app.api.schemas import PublicUserResponse
 from app.domain.exceptions import UserNotFoundError
 from app.settings import Settings, get_settings
 
@@ -35,5 +35,4 @@ async def internal_get_user(
     return PublicUserResponse(
         id=user.id,
         username=user.username,
-        created_at=format_utc_z(user.created_at),
     )
