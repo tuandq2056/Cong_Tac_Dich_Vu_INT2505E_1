@@ -177,7 +177,7 @@ if [ "$SKIP_NEWMAN" != "1" ]; then
         echo ">>> Executing Newman Collection: $(basename "$col")"
         CMD=("${NEWMAN_CMD[@]}" "$col")
         if [ -f "$ENV_FILE" ]; then
-          CMD+=(-e "$ENV_FILE")
+          CMD+=(-e "$ENV_FILE" --export-environment "$ENV_FILE")
         fi
         CMD+=(--bail)
         "${CMD[@]}" || {
