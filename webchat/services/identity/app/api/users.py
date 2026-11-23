@@ -43,7 +43,7 @@ async def get_user_by_username(
 ) -> PublicUserResponse:
     # Normalize input username
     normalized_name = normalize_username(username)
-    repo: UserRepository = await get_repository(settings)
+    repo: UserRepository = await get_repository()
     found = await repo.get_by_username(normalized_name)
     if found is None:
         raise UserNotFoundError(f"User '{username}' not found.")

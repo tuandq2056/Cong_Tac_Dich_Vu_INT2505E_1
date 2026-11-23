@@ -10,7 +10,6 @@ from typing import Any
 
 from app.domain.exceptions import UsernameTakenError
 from app.domain.models import User
-from app.settings import Settings
 
 logger = logging.getLogger("webchat.identity")
 
@@ -161,15 +160,14 @@ class PostgresUserRepository(UserRepository):
 _global_repo: UserRepository | None = None
 
 
-async def get_repository(settings: Settings | None = None) -> UserRepository:
+async def get_repository() -> UserRepository:
     global _global_repo
     if _global_repo is not None:
         return _global_repo
 
-    if settings is None:
-        from app.settings import get_settings
+    from app.settings import get_settings
 
-        settings = get_settings()
+    settings = get_settings()
 
     dsn = settings.database_url
     if dsn and (dsn.startswith("postgresql://") or dsn.startswith("postgresql+asyncpg://")):

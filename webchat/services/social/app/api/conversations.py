@@ -76,7 +76,7 @@ async def put_direct_conversation(
     settings: Annotated[Settings, Depends(get_settings)],
     repo: Annotated[SocialRepository, Depends(get_social_repository)],
 ) -> DirectConversationResponse:
-    id_client = get_identity_client(settings)
+    id_client = get_identity_client()
     conv, peer_id, is_created = await repo.get_or_create_direct_conversation(
         user_a=caller_id, user_b=friend_id
     )
@@ -111,7 +111,7 @@ async def create_group_conversation(
         {"name": payload.name, "member_ids": [str(m) for m in payload.member_ids]}
     )
 
-    id_client = get_identity_client(settings)
+    id_client = get_identity_client()
     status_code, body = await repo.create_group_conversation(
         creator_id=caller_id,
         idempotency_key=idempotency_key,
@@ -142,7 +142,7 @@ async def list_conversations(
     settings: Annotated[Settings, Depends(get_settings)],
     repo: Annotated[SocialRepository, Depends(get_social_repository)],
 ) -> ConversationPage:
-    id_client = get_identity_client(settings)
+    id_client = get_identity_client()
     pairs = await repo.list_conversations_for_user(caller_id)
     items = [await to_conversation_response(c, p, id_client) for c, p in pairs]
     return ConversationPage(items=items, next_cursor=None)
@@ -159,7 +159,7 @@ async def get_conversation(
     settings: Annotated[Settings, Depends(get_settings)],
     repo: Annotated[SocialRepository, Depends(get_social_repository)],
 ) -> DirectConversationResponse | GroupConversationResponse:
-    id_client = get_identity_client(settings)
+    id_client = get_identity_client()
     conv, peer_id = await repo.get_conversation(conv_id=conversation_id, requester_id=caller_id)
     return await to_conversation_response(conv, peer_id, id_client)
 
@@ -175,7 +175,7 @@ async def list_members(
     settings: Annotated[Settings, Depends(get_settings)],
     repo: Annotated[SocialRepository, Depends(get_social_repository)],
 ) -> UserPage:
-    id_client = get_identity_client(settings)
+    id_client = get_identity_client()
     member_ids = await repo.get_conversation_members(
         conv_id=conversation_id, requester_id=caller_id
     )

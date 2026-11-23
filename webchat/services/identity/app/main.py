@@ -15,8 +15,7 @@ from app.settings import get_settings
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    settings = get_settings()
-    repo = await get_repository(settings)
+    repo = await get_repository()
     yield
     await repo.close()
 

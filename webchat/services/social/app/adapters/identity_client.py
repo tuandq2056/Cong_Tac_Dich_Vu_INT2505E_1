@@ -66,13 +66,12 @@ class IdentityClient:
 _global_identity_client: IdentityClient | None = None
 
 
-def get_identity_client(settings: Settings | None = None) -> IdentityClient:
+def get_identity_client() -> IdentityClient:
     global _global_identity_client
     if _global_identity_client is None:
-        if settings is None:
-            from app.settings import get_settings
+        from app.settings import get_settings
 
-            settings = get_settings()
+        settings = get_settings()
         _global_identity_client = IdentityClient(settings)
     return _global_identity_client
 

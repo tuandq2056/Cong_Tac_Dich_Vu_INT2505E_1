@@ -43,7 +43,7 @@ async def register(
     normalized_name = normalize_username(payload.username)
     validate_password(payload.password)
 
-    repo: UserRepository = await get_repository(settings)
+    repo: UserRepository = await get_repository()
     pwd_hash = hash_password(payload.password)
     user = User.create(username=normalized_name)
     saved_user = await repo.create_user(user, pwd_hash)
@@ -72,7 +72,7 @@ async def login(
     except Exception as exc:
         raise InvalidCredentialsError("Invalid username or password.") from exc
 
-    repo: UserRepository = await get_repository(settings)
+    repo: UserRepository = await get_repository()
     found = await repo.get_by_username(normalized_name)
     if found is None:
         raise InvalidCredentialsError("Invalid username or password.")

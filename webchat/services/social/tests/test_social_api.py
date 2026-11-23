@@ -81,7 +81,7 @@ def test_social_friend_and_conversation_lifecycle(client: TestClient) -> None:
 
     from datetime import UTC, datetime
 
-    id_client = get_identity_client(get_settings())
+    id_client = get_identity_client()
     now = datetime.now(UTC)
     id_client.set_user_cache(user_a, "alice", now)
     id_client.set_user_cache(user_b, "bob", now)

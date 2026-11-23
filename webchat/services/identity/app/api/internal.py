@@ -26,7 +26,7 @@ async def internal_get_user(
     caller: Annotated[str, Depends(verify_internal_service)],
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> PublicUserResponse:
-    repo: UserRepository = await get_repository(settings)
+    repo: UserRepository = await get_repository()
     found = await repo.get_by_id(user_id)
     if found is None:
         raise UserNotFoundError(f"User with ID '{user_id}' not found.")

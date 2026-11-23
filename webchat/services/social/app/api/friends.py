@@ -73,7 +73,7 @@ async def create_friend_request(
     settings: Annotated[Settings, Depends(get_settings)],
     repo: Annotated[SocialRepository, Depends(get_social_repository)],
 ) -> FriendRequestResponse:
-    id_client = get_identity_client(settings)
+    id_client = get_identity_client()
     req, is_created = await repo.create_or_get_friend_request(
         sender_id=caller_id, recipient_id=payload.recipient_id
     )
@@ -93,7 +93,7 @@ async def list_friend_requests(
     direction: Annotated[str | None, Query()] = None,
     status: Annotated[str | None, Query()] = None,
 ) -> FriendRequestPage:
-    id_client = get_identity_client(settings)
+    id_client = get_identity_client()
     parsed_status = FriendRequestStatus(status) if status else None
     reqs = await repo.list_friend_requests(
         user_id=caller_id, direction=direction, status=parsed_status
@@ -114,7 +114,7 @@ async def decide_friend_request(
     settings: Annotated[Settings, Depends(get_settings)],
     repo: Annotated[SocialRepository, Depends(get_social_repository)],
 ) -> FriendRequestResponse:
-    id_client = get_identity_client(settings)
+    id_client = get_identity_client()
     updated = await repo.update_friend_request(
         request_id=request_id, actor_id=caller_id, action=payload.status
     )
@@ -131,7 +131,7 @@ async def list_friends(
     settings: Annotated[Settings, Depends(get_settings)],
     repo: Annotated[SocialRepository, Depends(get_social_repository)],
 ) -> UserPage:
-    id_client = get_identity_client(settings)
+    id_client = get_identity_client()
     friend_ids = await repo.list_friends(caller_id)
     items = [await enrich_user(fid, id_client) for fid in friend_ids]
     return UserPage(items=items, next_cursor=None)
