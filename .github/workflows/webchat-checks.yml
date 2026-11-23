@@ -154,7 +154,13 @@ jobs:
       - name: Service logs on failure
         if: failure()
         run: |
-          if [ -f docker-compose.yml ]; then docker compose logs --tail=200; fi
+          if [ -f docker-compose.yml ]; then
+            docker compose logs --tail=200
+            echo "### Service Logs on Failure" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            docker compose logs --tail=200 >> $GITHUB_STEP_SUMMARY 2>&1 || true
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          fi
       - name: Teardown stack
         if: always()
         run: |

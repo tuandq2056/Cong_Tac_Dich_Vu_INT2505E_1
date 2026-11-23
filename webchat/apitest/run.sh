@@ -182,6 +182,9 @@ if [ "$SKIP_NEWMAN" != "1" ]; then
         CMD+=(--bail)
         "${CMD[@]}" || {
           echo "ERROR: Newman collection $col failed!" >&2
+          if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+            echo "### :x: Newman Collection Failed: $(basename "$col")" >> "$GITHUB_STEP_SUMMARY"
+          fi
           exit 1
         }
         RUN_COUNT=$((RUN_COUNT + 1))
@@ -213,11 +216,18 @@ if [ "$SKIP_CONTRACT_TESTS" != "1" ]; then
     chmod +x "$SCHEMATHESIS_RUNNER"
     "$SCHEMATHESIS_RUNNER" || {
       echo "ERROR: Schemathesis contract fuzzing detected violations!" >&2
+      if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+        echo "### :x: Schemathesis Contract Fuzzing Failed" >> "$GITHUB_STEP_SUMMARY"
+      fi
       exit 1
     }
   else
     echo "WARNING: Schemathesis runner script not found. Skipping contract fuzzing." >&2
   fi
+fi
+
+if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+  echo "### :white_check_mark: All API and Contract Tests Passed!" >> "$GITHUB_STEP_SUMMARY"
 fi
 
 echo ""

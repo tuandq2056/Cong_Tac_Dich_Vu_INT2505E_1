@@ -46,7 +46,7 @@ class SocialClient:
         headers = {"Authorization": f"Bearer {token}"}
 
         try:
-            async with httpx.AsyncClient(timeout=0.5) as client:
+            async with httpx.AsyncClient(timeout=10.0) as client:
                 res = await client.get(url, headers=headers)
                 if res.status_code == 200:
                     data = res.json()
