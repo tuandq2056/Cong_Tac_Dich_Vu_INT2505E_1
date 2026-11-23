@@ -145,7 +145,7 @@ jobs:
         run: echo "::notice::Add an executable apitest/run.sh to enable REST and WebSocket tests."
       - name: Run API tests
         if: steps.harness.outputs.present == 'true'
-        run: KEEP_STACK=1 apitest/run.sh
+        run: KEEP_STACK=1 apitest/run.sh 2>&1 | tee apitest.log
       - name: Nuclei DAST Security Scanner
         if: steps.harness.outputs.present == 'true'
         run: |
@@ -154,11 +154,19 @@ jobs:
       - name: Service logs on failure
         if: failure()
         run: |
-          if [ -f docker-compose.yml ]; then
-            docker compose logs --tail=200
-            echo "### Service Logs on Failure" >> $GITHUB_STEP_SUMMARY
+          if [ -f apitest.log ]; then
+            echo "### API Test Failure Log" >> $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY
-            docker compose logs --tail=200 >> $GITHUB_STEP_SUMMARY 2>&1 || true
+            tail -n 80 apitest.log >> $GITHUB_STEP_SUMMARY 2>&1 || true
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            ERROR_LOG=$(tail -n 15 apitest.log | tr '\n' ' ' | sed 's/"/\\"/g')
+            echo "::error title=API Test Failure Detail::$ERROR_LOG"
+          fi
+          if [ -f docker-compose.yml ]; then
+            docker compose logs --tail=50
+            echo "### Docker Compose Logs on Failure" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            docker compose logs --tail=50 >> $GITHUB_STEP_SUMMARY 2>&1 || true
             echo '```' >> $GITHUB_STEP_SUMMARY
           fi
       - name: Teardown stack

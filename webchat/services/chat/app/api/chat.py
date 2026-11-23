@@ -154,7 +154,16 @@ async def get_attachment_content(
     else:
         data = b""
 
-    return Response(content=data, media_type=att.media_type)
+    disposition = "inline" if att.kind == "audio" else "attachment"
+    headers = {
+        "Cache-Control": "private, no-store",
+        "Content-Disposition": f'{disposition}; filename="{att.file_name}"',
+    }
+    return Response(
+        content=data,
+        media_type=att.media_type or "application/octet-stream",
+        headers=headers,
+    )
 
 
 @router.get(
