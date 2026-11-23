@@ -8,8 +8,11 @@ version = "0.1.0"
 description = "Friendships, conversations and membership."
 requires-python = ">=3.12"
 dependencies = [
+  "asyncpg>=0.29",
   "fastapi>=0.115",
+  "httpx>=0.28",
   "pydantic-settings>=2.6",
+  "pyjwt>=2.8",
   "uvicorn[standard]>=0.32",
 ]
 

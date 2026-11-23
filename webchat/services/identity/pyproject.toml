@@ -8,8 +8,10 @@ version = "0.1.0"
 description = "Accounts, usernames and tokens."
 requires-python = ">=3.12"
 dependencies = [
+  "asyncpg>=0.29",
   "fastapi>=0.115",
   "pydantic-settings>=2.6",
+  "pyjwt>=2.8",
   "uvicorn[standard]>=0.32",
 ]
 

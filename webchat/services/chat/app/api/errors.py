@@ -126,7 +126,7 @@ async def validation_exception_handler(
         field_name = ".".join(parts) if parts else "body"
         msg = str(err.get("msg", "Invalid value"))
         if msg.startswith("Value error, "):
-            msg = msg[len("Value error, "):]
+            msg = msg[len("Value error, ") :]
         fields.append({"field": field_name, "reason": msg})
 
     return create_error_response(
@@ -191,9 +191,7 @@ async def domain_exception_handler(
     exc: DomainError,
 ) -> JSONResponse:
     """Map domain exceptions to standard ErrorResponse."""
-    status_code, default_code = DOMAIN_ERROR_MAP.get(
-        type(exc), (400, "VALIDATION_ERROR")
-    )
+    status_code, default_code = DOMAIN_ERROR_MAP.get(type(exc), (400, "VALIDATION_ERROR"))
     code = exc.code or default_code
     related_id = getattr(exc, "related_id", None)
     return create_error_response(

@@ -25,6 +25,7 @@ from app.domain.exceptions import (
     UsernameTakenError,
     UserNotFoundError,
 )
+from app.domain.models import InvalidPasswordError, InvalidUsernameError
 
 logger = logging.getLogger("webchat.identity")
 
@@ -34,6 +35,8 @@ DOMAIN_ERROR_MAP: dict[type[DomainError], tuple[int, str]] = {
     InvalidCredentialsError: (401, "INVALID_CREDENTIALS"),
     UnauthenticatedError: (401, "UNAUTHENTICATED"),
     ServiceForbiddenError: (403, "SERVICE_FORBIDDEN"),
+    InvalidUsernameError: (422, "VALIDATION_ERROR"),
+    InvalidPasswordError: (422, "VALIDATION_ERROR"),
     GoogleDisabledError: (501, "GOOGLE_DISABLED"),
     GoogleUnavailableError: (503, "GOOGLE_UNAVAILABLE"),
     GoogleCodeInvalidError: (401, "GOOGLE_CODE_INVALID"),
@@ -179,9 +182,9 @@ async def domain_exception_handler(
 ) -> JSONResponse:
     """Map domain exceptions to standard ErrorResponse."""
     status_code, default_code = DOMAIN_ERROR_MAP.get(
-        type(exc), (400, "VALIDATION_ERROR")
+        type(exc), (422, "VALIDATION_ERROR")
     )
-    code = exc.code or default_code
+    code = default_code
     related_id = getattr(exc, "related_id", None)
     return create_error_response(
         request=request,
