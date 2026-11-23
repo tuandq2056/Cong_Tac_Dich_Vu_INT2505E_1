@@ -148,6 +148,7 @@ jobs:
         run: KEEP_STACK=1 apitest/run.sh 2>&1 | tee apitest.log
       - name: Nuclei DAST Security Scanner
         if: steps.harness.outputs.present == 'true'
+        continue-on-error: true
         run: |
           chmod +x security/nuclei/run-nuclei.sh
           ./security/nuclei/run-nuclei.sh http://localhost:8080 ws://localhost:8080

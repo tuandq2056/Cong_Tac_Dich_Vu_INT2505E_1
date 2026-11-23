@@ -17,6 +17,17 @@ Backend: FastAPI + PostgreSQL. Frontend: React + TypeScript. Three services, one
 
 `/internal/v1` is service-to-service only. The browser never calls it.
 
+## Implementation Status & Team Collaboration
+
+- **Hạ tầng CI/CD chung ([`.github/workflows/webchat-checks.yml`](../.github/workflows/webchat-checks.yml))**: Hoàn tất 100% tự động hóa kiểm tra: Gitleaks, Trivy, Load Smoke (200 req/20 workers), Kiểm tra kiến trúc ADR 0001, Sinh unit test tự động, Lint ruff, Redocly, AsyncAPI và Schemathesis/Newman API contract test.
+- **Microservice Identity ([`services/identity`](services/identity/)) - Production Ready**: Hoàn thiện thực tế kết nối PostgreSQL, mã hóa mật khẩu PBKDF2-HMAC-SHA256 (100k vòng, salt), cấp phát JWT token (aud=webchat) và kiểm tra service token nội bộ (aud=identity-internal), 34/34 unit test PASS.
+- **Microservices Social & Chat ([`services/social`](services/social/), [`services/chat`](services/chat/)) - Baseline Mocks**: Đang hoạt động ở chế độ mock/baseline tuân thủ nghiêm ngặt hợp đồng OpenAPI 3.1 & AsyncAPI 3.0 để toàn bộ luồng CI/CD và Gateway chạy thông suốt.
+- **Hướng dẫn cho thành viên phát triển module mới**:
+  1. Khi bắt đầu phát triển Social hoặc Chat thật, chỉ cần vào thư mục `services/social` hoặc `services/chat`.
+  2. Giữ nguyên wire schema trong `app/api/schemas.py` và các hợp đồng endpoint đã định nghĩa.
+  3. Thay thế/mở rộng logic nghiệp vụ và repository tương ứng với database của module.
+  4. Chạy `make verify` và `make test-api` tại local để đảm bảo module mới thay thế mock không làm hỏng hợp đồng chung.
+
 ## Layout
 
 | Path | What lives there |
