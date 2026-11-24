@@ -13,10 +13,10 @@ user-visible bug; `client_message_id` alone is not enough if the payload can cha
 
 ## Decision
 
-- **Message:** `UNIQUE (conversation_id, sender_id, client_message_id)` on `message`. On conflict,
-  compare the stored payload hash:
-  - same hash → return the stored message with `replayed=true`;
-  - different hash → `CLIENT_MESSAGE_ID_CONFLICT`, no new message.
+- **Message:** `UNIQUE (sender_id, client_message_id)` on `message`. On conflict,
+  compare the conversation and message content:
+  - same conversation and content → return the stored message with `replayed=true`;
+  - different conversation or content → `CLIENT_MESSAGE_ID_CONFLICT`, no new message.
 - **Group creation:** require `Idempotency-Key` (UUID). Table `idempotency_key` keyed by
   `(user_id, key)` stores `request_hash`, `response_status`, `response_body`, `created_at`, expires
   after 24 hours. Same key + same hash → replay the stored response (`200`). Same key + different hash

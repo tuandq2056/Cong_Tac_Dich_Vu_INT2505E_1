@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from app.adapters.repository import get_chat_repository
+from app.adapters.repository import get_chat_repository, set_chat_repository
 from app.api.chat import router as chat_router
 from app.api.errors import register_error_handlers
 from app.api.websocket import router as ws_router
@@ -15,8 +15,11 @@ from app.settings import get_settings
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     repo = await get_chat_repository()
-    yield
-    await repo.close()
+    try:
+        yield
+    finally:
+        await repo.close()
+        set_chat_repository(None)
 
 
 def create_app() -> FastAPI:

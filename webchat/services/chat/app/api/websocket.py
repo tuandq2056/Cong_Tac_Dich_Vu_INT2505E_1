@@ -7,24 +7,19 @@ import json
 import logging
 import uuid
 from datetime import UTC, datetime
-from typing import Any
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError
 
-from app.adapters.repository import (
-    ChatRepository,
-    get_chat_repository,
-)
+from app.adapters.repository import ChatRepository, get_chat_repository
 from app.adapters.security import verify_user_token
 from app.adapters.social_client import SocialClient, get_social_client
-from app.api.schemas import format_utc_z
-from app.domain.exceptions import (
-    ClientMessageIdConflictError,
-    DomainError,
-    UnauthenticatedError,
-)
-from app.domain.models import validate_text_content
-from app.settings import Settings, get_settings
+from app.api.chat import to_message_schema
+from app.api.dependencies import require_conversation_access
+from app.api.schemas import TextContent, format_utc_z
+from app.domain.exceptions import DomainError, UnauthenticatedError
+from app.settings import get_settings
 
 logger = logging.getLogger("webchat.chat.ws")
 
@@ -46,6 +41,9 @@ class ConnectionManager:
         if ws not in self._socket_convs:
             self._socket_convs[ws] = set()
         self._socket_convs[ws].add(conv_id)
+
+    def is_subscribed(self, conv_id: uuid.UUID, ws: WebSocket) -> bool:
+        return conv_id in self._socket_convs.get(ws, ())
 
     def unsubscribe(self, conv_id: uuid.UUID, ws: WebSocket) -> None:
         if conv_id in self._subscriptions:
@@ -79,215 +77,189 @@ class ConnectionManager:
 manager = ConnectionManager()
 
 
-@router.websocket("/ws/v1/chat")
-async def chat_websocket(
-    websocket: WebSocket,
-) -> None:
-    await websocket.accept()
-    settings: Settings = get_settings()
-    repo: ChatRepository = await get_chat_repository()
-    social: SocialClient = get_social_client()
+class Command(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    request_id: uuid.UUID
 
-    user_id: uuid.UUID | None = None
-    username: str = ""
 
-    # Phase 1: Wait for session.authenticate frame within 5 seconds (AsyncAPI spec)
+class Authenticate(Command):
+    type: Literal["session.authenticate"]
+    access_token: str
+
+
+class Subscription(Command):
+    type: Literal["conversation.subscribe", "conversation.unsubscribe"]
+    conversation_id: uuid.UUID
+
+
+class SentAttachment(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    type: Literal["audio", "file"]
+    attachment_id: uuid.UUID
+
+
+class Send(Command):
+    type: Literal["message.send"]
+    conversation_id: uuid.UUID
+    client_message_id: uuid.UUID
+    content: Annotated[TextContent | SentAttachment, Field(discriminator="type")]
+
+
+commands = TypeAdapter(Annotated[Authenticate | Subscription | Send, Field(discriminator="type")])
+
+
+async def receive_frame(ws: WebSocket) -> dict[str, Any]:
+    packet = await ws.receive()
+    if packet["type"] == "websocket.disconnect":
+        raise WebSocketDisconnect(packet["code"])
+    raw = packet.get("text")
+    if raw is None or len(raw.encode("utf-8")) > 32768:
+        code = 1003 if raw is None else 1009
+        await ws.close(code=code)
+        raise WebSocketDisconnect(code)
     try:
-        raw_msg = await asyncio.wait_for(websocket.receive_text(), timeout=5.0)
-        auth_data = json.loads(raw_msg)
-        if auth_data.get("type") != "session.authenticate" or not auth_data.get("token"):
-            await websocket.close(code=4401, reason="Authentication failed.")
+        frame = json.loads(raw)
+    except ValueError as exc:
+        raise DomainError("Expected a JSON object.", "INVALID_FRAME") from exc
+    if not isinstance(frame, dict):
+        raise DomainError("Expected a JSON object.", "INVALID_FRAME")
+    return frame
+
+
+async def handle_command(
+    ws: WebSocket,
+    command: Authenticate | Subscription | Send,
+    user_id: uuid.UUID,
+    username: str,
+    repo: ChatRepository,
+    social: SocialClient,
+) -> None:
+    request_id = str(command.request_id)
+    if isinstance(command, Authenticate):
+        raise DomainError("Session already authenticated.", "ALREADY_AUTHENTICATED")
+
+    room = command.conversation_id
+    if isinstance(command, Subscription):
+        response = {"request_id": request_id, "conversation_id": str(room)}
+        if command.type == "conversation.unsubscribe":
+            manager.unsubscribe(room, ws)
+            await ws.send_json({"type": "conversation.unsubscribed", **response})
             return
 
-        token = auth_data["token"]
-        claims = verify_user_token(token, settings)
-        user_id = uuid.UUID(claims["sub"])
-        username = claims.get("username", f"user_{str(user_id)[:8]}")
-
-        now = datetime.now(UTC)
-        await websocket.send_text(
-            json.dumps(
-                {
-                    "type": "session.ready",
-                    "user_id": str(user_id),
-                    "server_time": format_utc_z(now),
-                }
-            )
-        )
-    except TimeoutError:
-        logger.info("WS auth timed out after 5 seconds")
-        await websocket.close(code=4408, reason="Authentication timeout.")
-        return
-    except (UnauthenticatedError, Exception) as exc:
-        logger.info("WS auth failed: %s", exc)
-        await websocket.close(code=4401, reason="Invalid authentication token.")
+        await require_conversation_access(room, user_id, social)
+        manager.subscribe(room, ws)
+        try:
+            latest = await repo.get_latest_seq(room)
+        except Exception:
+            manager.unsubscribe(room, ws)
+            raise
+        await ws.send_json({"type": "conversation.subscribed", **response, "latest_seq": latest})
         return
 
-    # Phase 2: Session active loop
+    if not manager.is_subscribed(room, ws):
+        raise DomainError("Subscribe before sending.", "NOT_SUBSCRIBED")
+    await require_conversation_access(room, user_id, social, require_send=True)
+    content = command.content
+    stored, replayed = await repo.send_message(
+        conv_id=room,
+        sender_id=user_id,
+        sender_username=username,
+        client_message_id=command.client_message_id,
+        content_type=content.type,
+        text_content=content.text if isinstance(content, TextContent) else None,
+        attachment_id=content.attachment_id if isinstance(content, SentAttachment) else None,
+    )
+    message = to_message_schema(stored).model_dump(mode="json", exclude_none=True)
     try:
+        await ws.send_json(
+            {
+                "type": "message.ack",
+                "request_id": request_id,
+                "message": message,
+                "replayed": replayed,
+            }
+        )
+    finally:
+        if not replayed:
+            await manager.broadcast_to_conversation(
+                room, {"type": "message.created", "message": message}
+            )
+
+
+async def send_error(ws: WebSocket, request_id: str | None, error: DomainError) -> None:
+    await ws.send_json(
+        {
+            "type": "error",
+            "request_id": request_id,
+            "code": error.code,
+            "message": error.message,
+            "retryable": error.code in {"SOCIAL_UNAVAILABLE", "CHAT_UNAVAILABLE"},
+        }
+    )
+
+
+@router.websocket("/ws/v1/chat")
+async def chat_websocket(websocket: WebSocket) -> None:
+    await websocket.accept()
+    try:
+        try:
+            frame = await asyncio.wait_for(receive_frame(websocket), timeout=5)
+            auth = Authenticate.model_validate(frame)
+            claims = verify_user_token(auth.access_token, get_settings())
+            user_id = uuid.UUID(claims["sub"])
+            username = claims.get("username")
+            if not isinstance(username, str) or not username:
+                raise UnauthenticatedError()
+            expiry = datetime.fromtimestamp(claims["exp"], UTC)
+        except TimeoutError:
+            await websocket.close(code=4408)
+            return
+        except (DomainError, ValueError, TypeError, OverflowError):
+            await websocket.close(code=4401)
+            return
+        await websocket.send_json(
+            {
+                "type": "session.ready",
+                "request_id": str(auth.request_id),
+                "session_id": str(uuid.uuid4()),
+                "user_id": str(user_id),
+                "expires_at": format_utc_z(expiry),
+            }
+        )
+
+        repo = await get_chat_repository()
+        social = get_social_client()
         while True:
-            text_data = await websocket.receive_text()
-            frame = json.loads(text_data)
-            frame_type = frame.get("type")
-
-            if frame_type == "conversation.subscribe":
-                raw_conv_id = frame.get("conversation_id")
-                if not raw_conv_id:
-                    continue
-                conv_id = uuid.UUID(raw_conv_id)
-                can_read, _ = await social.check_permissions(conv_id, user_id)
-                if not can_read:
-                    await websocket.send_text(
-                        json.dumps(
-                            {
-                                "type": "error",
-                                "code": "CONVERSATION_NOT_FOUND",
-                                "message": "Conversation not found or access denied.",
-                            }
-                        )
-                    )
-                    continue
-
-                manager.subscribe(conv_id, websocket)
-                latest_seq = await repo.get_latest_seq(conv_id)
-                await websocket.send_text(
-                    json.dumps(
-                        {
-                            "type": "conversation.subscribed",
-                            "conversation_id": str(conv_id),
-                            "latest_seq": latest_seq,
-                        }
-                    )
-                )
-
-            elif frame_type == "conversation.unsubscribe":
-                raw_conv_id = frame.get("conversation_id")
-                if raw_conv_id:
-                    conv_id = uuid.UUID(raw_conv_id)
-                    manager.unsubscribe(conv_id, websocket)
-                    await websocket.send_text(
-                        json.dumps(
-                            {
-                                "type": "conversation.unsubscribed",
-                                "conversation_id": str(conv_id),
-                            }
-                        )
-                    )
-
-            elif frame_type == "message.send":
-                raw_conv_id = frame.get("conversation_id")
-                raw_client_msg_id = frame.get("client_message_id")
-                content = frame.get("content", {})
-
-                if not raw_conv_id or not raw_client_msg_id or not content:
-                    await websocket.send_text(
-                        json.dumps(
-                            {
-                                "type": "error",
-                                "code": "VALIDATION_ERROR",
-                                "message": "Invalid message.send frame.",
-                            }
-                        )
-                    )
-                    continue
-
-                conv_id = uuid.UUID(raw_conv_id)
-                client_msg_id = uuid.UUID(raw_client_msg_id)
-
-                can_read, can_send = await social.check_permissions(conv_id, user_id)
-                if not can_send:
-                    await websocket.send_text(
-                        json.dumps(
-                            {
-                                "type": "error",
-                                "code": "ACTION_FORBIDDEN",
-                                "message": "You cannot send messages in this conversation.",
-                            }
-                        )
-                    )
-                    continue
-
-                content_type = content.get("type", "text")
-                msg_text = content.get("text")
-                att_id = (
-                    uuid.UUID(content["attachment_id"]) if content.get("attachment_id") else None
-                )
-
-                if content_type == "text":
-                    try:
-                        validate_text_content(msg_text or "")
-                    except DomainError as de:
-                        await websocket.send_text(
-                            json.dumps(
-                                {
-                                    "type": "error",
-                                    "code": de.code or "VALIDATION_ERROR",
-                                    "message": de.message,
-                                }
-                            )
-                        )
-                        continue
-
+            request_id = None
+            try:
+                remaining = (expiry - datetime.now(UTC)).total_seconds()
                 try:
-                    stored_msg, is_replayed = await repo.send_message(
-                        conv_id=conv_id,
-                        sender_id=user_id,
-                        client_message_id=client_msg_id,
-                        content_type=content_type,
-                        text_content=msg_text,
-                        attachment_id=att_id,
-                    )
-                except ClientMessageIdConflictError:
-                    await websocket.send_text(
-                        json.dumps(
-                            {
-                                "type": "error",
-                                "code": "CLIENT_MESSAGE_ID_CONFLICT",
-                                "message": (
-                                    "Client message ID was already used with different payload."
-                                ),
-                            }
-                        )
-                    )
-                    continue
-
-                # 1. ACK back to sender
-                await websocket.send_text(
-                    json.dumps(
-                        {
-                            "type": "message.ack",
-                            "conversation_id": str(conv_id),
-                            "client_message_id": str(client_msg_id),
-                            "message_id": str(stored_msg.id),
-                            "seq": stored_msg.seq,
-                            "created_at": format_utc_z(stored_msg.created_at),
-                            "replayed": is_replayed,
-                        }
-                    )
+                    frame = await asyncio.wait_for(receive_frame(websocket), timeout=remaining)
+                except TimeoutError:
+                    await websocket.close(code=4401)
+                    return
+                raw_id = frame.get("request_id")
+                if isinstance(raw_id, str):
+                    try:
+                        request_id = str(uuid.UUID(raw_id))
+                    except ValueError:
+                        pass
+                command = commands.validate_python(frame)
+                await handle_command(websocket, command, user_id, username, repo, social)
+            except ValidationError:
+                await send_error(
+                    websocket, request_id, DomainError("Invalid command.", "VALIDATION_ERROR")
                 )
-
-                # 2. If newly created, broadcast message.created to all conversation subscribers
-                if not is_replayed:
-                    event_payload = {
-                        "type": "message.created",
-                        "conversation_id": str(conv_id),
-                        "message": {
-                            "id": str(stored_msg.id),
-                            "seq": stored_msg.seq,
-                            "conversation_id": str(conv_id),
-                            "sender": {
-                                "id": str(user_id),
-                                "username": username,
-                            },
-                            "content": content,
-                            "created_at": format_utc_z(stored_msg.created_at),
-                            "client_message_id": str(client_msg_id),
-                        },
-                    }
-                    await manager.broadcast_to_conversation(conv_id, event_payload)
-
+            except DomainError as exc:
+                await send_error(websocket, request_id, exc)
+            except WebSocketDisconnect:
+                raise
+            except Exception:
+                logger.exception("Chat command failed")
+                await send_error(
+                    websocket, request_id, DomainError("Storage unavailable.", "CHAT_UNAVAILABLE")
+                )
     except WebSocketDisconnect:
-        manager.disconnect(websocket)
-    except Exception as exc:
-        logger.error("WebSocket unhandled exception: %s", exc)
+        pass
+    finally:
         manager.disconnect(websocket)

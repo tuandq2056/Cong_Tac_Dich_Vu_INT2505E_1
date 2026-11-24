@@ -19,6 +19,7 @@ from app.domain.models import (
     clamp_read_state,
     filter_messages_for_summary,
 )
+from app.migrations import upgrade_database
 
 logger = logging.getLogger("webchat.chat")
 
@@ -44,6 +45,7 @@ class StoredMessage:
     conversation_id: uuid.UUID
     seq: int
     sender_id: uuid.UUID
+    sender_username: str
     client_message_id: uuid.UUID
     content_type: str  # "text" | "audio" | "file"
     text_content: str | None
@@ -67,6 +69,7 @@ class ChatRepository(ABC):
         sender_id: uuid.UUID,
         client_message_id: uuid.UUID,
         content_type: str,
+        sender_username: str,
         text_content: str | None = None,
         attachment_id: uuid.UUID | None = None,
     ) -> tuple[StoredMessage, bool]:
@@ -121,8 +124,8 @@ class MemoryChatRepository(ChatRepository):
         self._attachments: dict[uuid.UUID, StoredAttachment] = {}
         # conv_id -> list of StoredMessage (sorted by seq)
         self._messages: dict[uuid.UUID, list[StoredMessage]] = {}
-        # (conv_id, sender_id, client_message_id) -> StoredMessage
-        self._idemp: dict[tuple[uuid.UUID, uuid.UUID, uuid.UUID], StoredMessage] = {}
+        # (sender_id, client_message_id) -> StoredMessage
+        self._idemp: dict[tuple[uuid.UUID, uuid.UUID], StoredMessage] = {}
         # (conv_id, user_id) -> last_read_seq
         self._read_states: dict[tuple[uuid.UUID, uuid.UUID], int] = {}
 
@@ -158,14 +161,15 @@ class MemoryChatRepository(ChatRepository):
         sender_id: uuid.UUID,
         client_message_id: uuid.UUID,
         content_type: str,
+        sender_username: str,
         text_content: str | None = None,
         attachment_id: uuid.UUID | None = None,
     ) -> tuple[StoredMessage, bool]:
-        key = (conv_id, sender_id, client_message_id)
+        key = (sender_id, client_message_id)
         if key in self._idemp:
             existing = self._idemp[key]
             # Verify content match
-            if existing.content_type == content_type:
+            if existing.conversation_id == conv_id and existing.content_type == content_type:
                 if content_type == "text" and existing.text_content == text_content:
                     return existing, True
                 if (
@@ -206,6 +210,7 @@ class MemoryChatRepository(ChatRepository):
             conversation_id=conv_id,
             seq=current_seq,
             sender_id=sender_id,
+            sender_username=sender_username,
             client_message_id=client_message_id,
             content_type=content_type,
             text_content=text_content,
@@ -337,52 +342,8 @@ class PostgresChatRepository(ChatRepository):
     async def init_db(self) -> None:
         import asyncpg
 
+        await upgrade_database(self._dsn)
         self._pool = await asyncpg.create_pool(dsn=self._dsn, min_size=1, max_size=10)
-        async with self._pool.acquire() as conn:
-            await conn.execute("""
-                CREATE TABLE IF NOT EXISTS conversation_counter (
-                    conversation_id UUID PRIMARY KEY,
-                    last_seq BIGINT NOT NULL DEFAULT 0
-                );
-
-                CREATE TABLE IF NOT EXISTS attachments (
-                    id UUID PRIMARY KEY,
-                    conversation_id UUID NOT NULL,
-                    uploader_id UUID NOT NULL,
-                    kind VARCHAR(10) NOT NULL,
-                    file_name VARCHAR(255) NOT NULL,
-                    media_type VARCHAR(100) NOT NULL,
-                    byte_size BIGINT NOT NULL,
-                    duration_ms INT,
-                    file_path TEXT NOT NULL,
-                    bound_to_message_id UUID,
-                    created_at TIMESTAMPTZ NOT NULL
-                );
-
-                CREATE TABLE IF NOT EXISTS messages (
-                    id UUID PRIMARY KEY,
-                    conversation_id UUID NOT NULL,
-                    seq BIGINT NOT NULL,
-                    sender_id UUID NOT NULL,
-                    client_message_id UUID NOT NULL,
-                    content_type VARCHAR(20) NOT NULL,
-                    text_content TEXT,
-                    attachment_id UUID REFERENCES attachments(id),
-                    created_at TIMESTAMPTZ NOT NULL,
-                    UNIQUE (conversation_id, seq),
-                    UNIQUE (conversation_id, sender_id, client_message_id)
-                );
-                CREATE INDEX IF NOT EXISTS idx_messages_conv_seq ON messages (conversation_id, seq);
-
-                CREATE TABLE IF NOT EXISTS read_states (
-                    conversation_id UUID NOT NULL,
-                    user_id UUID NOT NULL,
-                    last_read_seq BIGINT NOT NULL DEFAULT 0,
-                    updated_at TIMESTAMPTZ NOT NULL,
-                    PRIMARY KEY (conversation_id, user_id)
-                );
-            """)
-        logger.info("PostgreSQL Chat schema initialized successfully.")
 
     async def close(self) -> None:
         if self._pool is not None:
@@ -454,12 +415,17 @@ class PostgresChatRepository(ChatRepository):
         sender_id: uuid.UUID,
         client_message_id: uuid.UUID,
         content_type: str,
+        sender_username: str,
         text_content: str | None = None,
         attachment_id: uuid.UUID | None = None,
     ) -> tuple[StoredMessage, bool]:
         async with self._pool.acquire() as conn:
             async with conn.transaction():
-                # Check existing idempotency
+                # Concurrent retries must inspect the winner after its transaction commits.
+                await conn.execute(
+                    "SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))",
+                    f"{sender_id}/{client_message_id}",
+                )
                 existing_row = await conn.fetchrow(
                     """
                     SELECT m.*, a.kind as a_kind, a.file_name as a_fn, a.media_type as a_mt,
@@ -467,13 +433,14 @@ class PostgresChatRepository(ChatRepository):
                            a.created_at as a_ca, a.uploader_id as a_up
                     FROM messages m
                     LEFT JOIN attachments a ON m.attachment_id = a.id
-                    WHERE m.conversation_id = $1 AND m.sender_id = $2 AND m.client_message_id = $3
+                    WHERE m.sender_id = $1 AND m.client_message_id = $2
                     """,
-                    conv_id,
                     sender_id,
                     client_message_id,
                 )
                 if existing_row:
+                    if existing_row["conversation_id"] != conv_id:
+                        raise ClientMessageIdConflictError()
                     if existing_row["content_type"] == content_type:
                         if content_type == "text" and existing_row["text_content"] == text_content:
                             return self._build_stored_msg(existing_row), True
@@ -510,8 +477,8 @@ class PostgresChatRepository(ChatRepository):
                     """
                     INSERT INTO messages
                     (id, conversation_id, seq, sender_id, client_message_id,
-                     content_type, text_content, attachment_id, created_at)
-                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                     content_type, text_content, attachment_id, created_at, sender_username)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
                     """,
                     msg_id,
                     conv_id,
@@ -522,6 +489,7 @@ class PostgresChatRepository(ChatRepository):
                     text_content,
                     attachment_id,
                     now,
+                    sender_username,
                 )
 
                 att: StoredAttachment | None = None
@@ -554,6 +522,7 @@ class PostgresChatRepository(ChatRepository):
                     conversation_id=conv_id,
                     seq=allocated_seq,
                     sender_id=sender_id,
+                    sender_username=sender_username,
                     client_message_id=client_message_id,
                     content_type=content_type,
                     text_content=text_content,
@@ -583,6 +552,7 @@ class PostgresChatRepository(ChatRepository):
             conversation_id=r["conversation_id"],
             seq=r["seq"],
             sender_id=r["sender_id"],
+            sender_username=r["sender_username"],
             client_message_id=r["client_message_id"],
             content_type=r["content_type"],
             text_content=r["text_content"],
@@ -771,14 +741,11 @@ async def get_chat_repository() -> ChatRepository:
     settings = get_settings()
 
     dsn = settings.database_url
-    if dsn and (dsn.startswith("postgresql://") or dsn.startswith("postgresql+asyncpg://")):
-        try:
-            repo = PostgresChatRepository(dsn)
-            await repo.init_db()
-            _global_chat_repo = repo
-            return _global_chat_repo
-        except Exception as exc:
-            logger.warning("Could not connect to Postgres Chat (%s), fallback to Memory repo", exc)
+    if dsn:
+        repo = PostgresChatRepository(dsn)
+        await repo.init_db()
+        _global_chat_repo = repo
+        return repo
 
     mem_repo = MemoryChatRepository()
     await mem_repo.init_db()

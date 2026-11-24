@@ -60,7 +60,7 @@ def to_attachment_schema(att: StoredAttachment) -> Attachment:
 def to_message_schema(m: StoredMessage) -> Message:
     sender = PublicUser(
         id=m.sender_id,
-        username=f"user_{str(m.sender_id)[:8]}",
+        username=m.sender_username,
     )
     if m.content_type == "text":
         content = TextContent(type="text", text=m.text_content or "")

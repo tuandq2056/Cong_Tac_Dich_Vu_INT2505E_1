@@ -25,43 +25,34 @@ def make_service_token(settings: Settings) -> str:
 
 
 class SocialClient:
-    def __init__(self, settings: Settings) -> None:
-        self.settings = settings
-        # (conv_id, user_id) -> (can_read, can_send)
-        self._perms_cache: dict[tuple[uuid.UUID, uuid.UUID], tuple[bool, bool]] = {}
-
-    def set_permission(
-        self, conv_id: uuid.UUID, user_id: uuid.UUID, can_read: bool, can_send: bool
+    def __init__(
+        self, settings: Settings, transport: httpx.AsyncBaseTransport | None = None
     ) -> None:
-        self._perms_cache[(conv_id, user_id)] = (can_read, can_send)
+        self.settings = settings
+        self.transport = transport
 
     async def check_permissions(self, conv_id: uuid.UUID, user_id: uuid.UUID) -> tuple[bool, bool]:
-        key = (conv_id, user_id)
-        if key in self._perms_cache:
-            return self._perms_cache[key]
-
         base = self.settings.social_url.rstrip("/")
         url = f"{base}/internal/v1/conversations/{conv_id}/members/{user_id}/permissions"
         token = make_service_token(self.settings)
         headers = {"Authorization": f"Bearer {token}"}
 
         try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
+            async with httpx.AsyncClient(timeout=10.0, transport=self.transport) as client:
                 res = await client.get(url, headers=headers)
                 if res.status_code == 200:
                     data = res.json()
-                    can_read = bool(data.get("can_read", False))
-                    can_send = bool(data.get("can_send", False))
-                    self._perms_cache[key] = (can_read, can_send)
-                    return can_read, can_send
+                    if not isinstance(data, dict) or not all(
+                        isinstance(data.get(field), bool) for field in ("can_read", "can_send")
+                    ):
+                        raise SocialUnavailableError("Invalid permission response from Social.")
+                    return data["can_read"], data["can_send"]
                 if res.status_code == 404:
                     return False, False
                 raise SocialUnavailableError("Social service returned error status.")
-        except httpx.RequestError as exc:
-            # Check cache or raise
-            if key in self._perms_cache:
-                return self._perms_cache[key]
-            raise SocialUnavailableError(f"Cannot connect to social service: {exc}") from exc
+        except (httpx.RequestError, ValueError) as exc:
+            raise SocialUnavailableError() from exc
+
 
 
 _global_social_client: SocialClient | None = None

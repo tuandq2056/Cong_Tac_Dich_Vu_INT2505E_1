@@ -22,6 +22,15 @@ jobs:
   verify:
     name: Backend, web and contracts
     runs-on: ubuntu-latest
+    services:
+      chatdb:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: chat-ci
+        ports:
+          - 5432/tcp
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 3s --health-retries 12
     defaults:
       run:
         working-directory: webchat
@@ -39,6 +48,8 @@ jobs:
       - name: Generate unit tests
         run: python tools/testgen/cli.py
       - name: Backend tests
+        env:
+          CHAT_TEST_ADMIN_DSN: postgresql://postgres:chat-ci@127.0.0.1:${{ job.services.chatdb.ports[5432] }}/postgres
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r requirements-dev.txt

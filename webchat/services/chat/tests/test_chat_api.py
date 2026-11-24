@@ -5,11 +5,16 @@ from __future__ import annotations
 import io
 import time
 import uuid
+from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 
+import httpx
 import jwt
 import pytest
+import yaml
 from fastapi.testclient import TestClient
+from jsonschema import Draft202012Validator
 
 from app.adapters.repository import MemoryChatRepository, set_chat_repository
 from app.adapters.social_client import SocialClient, set_social_client
@@ -32,14 +37,38 @@ def make_user_token(user_id: uuid.UUID, username: str) -> str:
 
 
 @pytest.fixture(autouse=True)
-def clean_memory_repo() -> Any:
+def clean_memory_repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Any:
+    monkeypatch.setattr(get_settings(), "attachment_root", str(tmp_path))
     repo = MemoryChatRepository()
     set_chat_repository(repo)
-    social = SocialClient(get_settings())
-    set_social_client(social)
     yield
     set_chat_repository(None)
     set_social_client(None)
+
+
+@pytest.fixture
+def social_responses() -> dict[str, httpx.Response]:
+    responses: dict[str, httpx.Response] = {}
+    settings = get_settings()
+
+    def permissions(request: httpx.Request) -> httpx.Response:
+        assert request.method == "GET"
+        token = request.headers["Authorization"].removeprefix("Bearer ")
+        claims = jwt.decode(
+            token,
+            settings.service_jwt_secret,
+            algorithms=["HS256"],
+            audience=settings.social_internal_audience,
+        )
+        assert claims["sub"] == "chat"
+        return responses.get(request.url.path, httpx.Response(404))
+
+    set_social_client(SocialClient(settings, transport=httpx.MockTransport(permissions)))
+    return responses
+
+
+def permission_path(room: uuid.UUID, user: uuid.UUID) -> str:
+    return f"/internal/v1/conversations/{room}/members/{user}/permissions"
 
 
 @pytest.fixture
@@ -47,7 +76,7 @@ def client() -> TestClient:
     return TestClient(create_app())
 
 
-def test_chat_rest_lifecycle(client: TestClient) -> None:
+def test_chat_rest_lifecycle(client: TestClient, social_responses: dict) -> None:
     user_a = uuid.uuid4()
     outsider = uuid.uuid4()
     conv_id = uuid.uuid4()
@@ -58,12 +87,9 @@ def test_chat_rest_lifecycle(client: TestClient) -> None:
     headers_a = {"Authorization": f"Bearer {token_a}"}
     headers_out = {"Authorization": f"Bearer {token_out}"}
 
-    # Seed permission: user_a has read/send in conv_id
-    from app.adapters.social_client import get_social_client
-
-    social = get_social_client()
-    social.set_permission(conv_id, user_a, can_read=True, can_send=True)
-    social.set_permission(conv_id, outsider, can_read=False, can_send=False)
+    social_responses[permission_path(conv_id, user_a)] = httpx.Response(
+        200, json={"can_read": True, "can_send": True}
+    )
 
     # 1. Initial message history is empty
     res_history = client.get(
@@ -161,67 +187,113 @@ def test_chat_rest_lifecycle(client: TestClient) -> None:
     assert res_search_empty.status_code == 422
 
 
-def test_chat_websocket_workflow(client: TestClient) -> None:
-    user_a = uuid.uuid4()
-    conv_id = uuid.uuid4()
-    token_a = make_user_token(user_a, "alice")
+CONTRACT = yaml.safe_load(
+    (Path(__file__).resolve().parents[3] / "contracts/asyncapi.yaml").read_text(encoding="utf8")
+)
 
-    from app.adapters.social_client import get_social_client
 
-    social = get_social_client()
-    social.set_permission(conv_id, user_a, can_read=True, can_send=True)
+def validate_frame(frame: dict, name: str) -> None:
+    schema = {"$ref": f"#/components/schemas/{name}", "components": CONTRACT["components"]}
+    Draft202012Validator(schema, format_checker=Draft202012Validator.FORMAT_CHECKER).validate(frame)
+
+
+def test_chat_websocket_workflow(client: TestClient, social_responses: dict) -> None:
+    user = uuid.uuid4()
+    room = uuid.uuid4()
+    other_room = uuid.uuid4()
+    path = permission_path(room, user)
+    allowed = httpx.Response(200, json={"can_read": True, "can_send": True})
+    social_responses[path] = allowed
+    token = make_user_token(user, "alice")
 
     with client.websocket_connect("/ws/v1/chat") as ws:
-        # 1. Authenticate
-        ws.send_json({"type": "session.authenticate", "token": token_a})
-        auth_ack = ws.receive_json()
-        assert auth_ack["type"] == "session.ready"
-        assert auth_ack["user_id"] == str(user_a)
 
-        # 2. Subscribe
-        ws.send_json({"type": "conversation.subscribe", "conversation_id": str(conv_id)})
-        sub_ack = ws.receive_json()
-        assert sub_ack["type"] == "conversation.subscribed"
-        assert sub_ack["conversation_id"] == str(conv_id)
-        assert sub_ack["latest_seq"] == 0
+        def command(schema: str, event: str, reply: str, **fields: Any) -> dict:
+            request_id = str(uuid.uuid4())
+            frame = {"type": event, "request_id": request_id, **fields}
+            validate_frame(frame, schema)
+            ws.send_json(frame)
+            result = ws.receive_json()
+            validate_frame(result, reply)
+            assert result["request_id"] == request_id
+            return result
 
-        # 3. Send message
-        client_msg_id = str(uuid.uuid4())
-        ws.send_json(
-            {
-                "type": "message.send",
-                "conversation_id": str(conv_id),
-                "client_message_id": client_msg_id,
-                "content": {"type": "text", "text": "Hello WebSocket world!"},
-            }
+        ready = command(
+            "SessionAuthenticate", "session.authenticate", "SessionReady", access_token=token
+        )
+        assert ready["user_id"] == str(user)
+        fields = dict(
+            conversation_id=str(room),
+            client_message_id=str(uuid.uuid4()),
+            content={"type": "text", "text": "Hello WebSocket world!"},
+        )
+        error = command("MessageSend", "message.send", "ErrorFrame", **fields)
+        assert error["code"] == "NOT_SUBSCRIBED"
+        sub = command(
+            "ConversationSubscribe",
+            "conversation.subscribe",
+            "ConversationSubscribed",
+            conversation_id=str(room),
+        )
+        assert sub["latest_seq"] == 0
+
+        social_responses[path] = httpx.Response(503)
+        error = command("MessageSend", "message.send", "ErrorFrame", **fields)
+        assert (error["code"], error["retryable"]) == ("SOCIAL_UNAVAILABLE", True)
+        social_responses[path] = httpx.Response(200, json={"can_read": True, "can_send": False})
+        error = command("MessageSend", "message.send", "ErrorFrame", **fields)
+        assert error["code"] == "FRIENDSHIP_REQUIRED"
+
+        social_responses[path] = allowed
+        with patch.object(
+            MemoryChatRepository, "send_message", side_effect=OSError("write failed")
+        ):
+            error = command("MessageSend", "message.send", "ErrorFrame", **fields)
+            assert (error["code"], error["retryable"]) == ("CHAT_UNAVAILABLE", True)
+        ack = command("MessageSend", "message.send", "MessageAck", **fields)
+        message = ack["message"]
+        assert not ack["replayed"]
+        assert message["seq"] == 1
+        assert message["sender"] == {"id": str(user), "username": "alice"}
+        assert message["client_message_id"] == fields["client_message_id"]
+        assert message["content"] == fields["content"]
+        created = ws.receive_json()
+        validate_frame(created, "MessageCreated")
+        assert created["message"] == message
+        replay = command("MessageSend", "message.send", "MessageAck", **fields)
+        assert replay["replayed"] and replay["message"] == message
+
+        denied = command(
+            "ConversationSubscribe",
+            "conversation.subscribe",
+            "ErrorFrame",
+            conversation_id=str(other_room),
+        )
+        assert denied["code"] == "CONVERSATION_NOT_FOUND"
+        social_responses[permission_path(other_room, user)] = allowed
+        command(
+            "ConversationSubscribe",
+            "conversation.subscribe",
+            "ConversationSubscribed",
+            conversation_id=str(other_room),
+        )
+        fields["conversation_id"] = str(other_room)
+        conflict = command("MessageSend", "message.send", "ErrorFrame", **fields)
+        assert conflict["code"] == "CLIENT_MESSAGE_ID_CONFLICT"
+        command(
+            "ConversationUnsubscribe",
+            "conversation.unsubscribe",
+            "ConversationUnsubscribed",
+            conversation_id=str(room),
         )
 
-        ack = ws.receive_json()
-        assert ack["type"] == "message.ack"
-        assert ack["seq"] == 1
-        assert ack["replayed"] is False
+    history = client.get(
+        f"/api/v1/conversations/{room}/messages", headers={"Authorization": f"Bearer {token}"}
+    )
+    assert history.json()["items"] == [message]
 
-        # Also receive broadcast message.created
-        created_event = ws.receive_json()
-        assert created_event["type"] == "message.created"
-        assert created_event["message"]["seq"] == 1
-        assert created_event["message"]["content"]["text"] == "Hello WebSocket world!"
 
-        # 4. Replay message.send (idempotent)
-        ws.send_json(
-            {
-                "type": "message.send",
-                "conversation_id": str(conv_id),
-                "client_message_id": client_msg_id,
-                "content": {"type": "text", "text": "Hello WebSocket world!"},
-            }
-        )
-        replay_ack = ws.receive_json()
-        assert replay_ack["type"] == "message.ack"
-        assert replay_ack["seq"] == 1
-        assert replay_ack["replayed"] is True
-
-        # 5. Unsubscribe
-        ws.send_json({"type": "conversation.unsubscribe", "conversation_id": str(conv_id)})
-        unsub_ack = ws.receive_json()
-        assert unsub_ack["type"] == "conversation.unsubscribed"
+def test_asyncapi_payload_examples() -> None:
+    for name, definition in CONTRACT["components"]["messages"].items():
+        for example in definition.get("examples", []):
+            validate_frame(example["payload"], name)
